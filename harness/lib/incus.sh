@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
-# incus VM / system-container lifecycle helpers for the forge harness.  # #3
+# see anonhostpi/forge#3
 set -uo pipefail
 : "${INCUS:=incus}"
 
 incus_available() { command -v "$INCUS" >/dev/null 2>&1; }
 
-# vm_launch <name> <image>  — a VM (real kernel) for the grading E2E (k3s + sysctl need a kernel)
-vm_launch() { "$INCUS" launch "$2" "$1" --vm -c limits.cpu=2 -c limits.memory=4GiB; }
-# ct_launch <name> <image>  — a system-container for the fast fragment loop (no kernel needed)
+vm_launch() { "$INCUS" launch "$2" "$1" --vm -c limits.cpu=2 -c limits.memory=4GiB; }  # --vm: k3s + sysctl hardening need a real kernel
 ct_launch() { "$INCUS" launch "$2" "$1"; }
 
-instance_exists() { "$INCUS" info "$1" >/dev/null 2>&1; }
-instance_delete() { if instance_exists "$1"; then "$INCUS" delete -f "$1"; fi; }
-inst_exec()       { local n="$1"; shift; "$INCUS" exec "$n" -- "$@"; }
-inst_push_userdata() { "$INCUS" config set "$1" user.user-data - < "$2"; }   # cloud-init user-data
-inst_snapshot()   { "$INCUS" snapshot "$1" "$2"; }
-inst_restore()    { "$INCUS" restore "$1" "$2"; }
+inst_exists()        { "$INCUS" info "$1" >/dev/null 2>&1; }
+inst_delete()        { if inst_exists "$1"; then "$INCUS" delete -f "$1"; fi; }
+inst_exec()          { local n="$1"; shift; "$INCUS" exec "$n" -- "$@"; }
+inst_push_userdata() { "$INCUS" config set "$1" user.user-data - < "$2"; }
+inst_snapshot()      { "$INCUS" snapshot "$1" "$2"; }
+inst_restore()       { "$INCUS" restore "$1" "$2"; }
 
-# wait_cloud_init <name> [timeout_s] — block until cloud-init finishes; 0=done, 1=error/timeout
 wait_cloud_init() {
   local n="$1" t="${2:-600}" s=0 st
   while [ "$s" -lt "$t" ]; do

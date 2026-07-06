@@ -9,7 +9,7 @@ SUBSTRATE="${1:-clean}"; IMAGE="${2:-images:ubuntu/24.04/cloud}"; VM="forge-e2e-
 incus_available || { skip "incus unavailable — E2E gate needs a KVM runner (#3 nested-KVM RISK)"; report; exit $?; }
 [ -f "$REPO_ROOT/cloud-init.yml" ] || { skip "cloud-init.yml absent (U5 pending) — deploy not yet gradable"; report; exit $?; }
 
-trap 'instance_delete "$VM"' EXIT
+trap 'inst_delete "$VM"' EXIT
 echo "== E2E ($SUBSTRATE) =="
 vm_launch "$VM" "$IMAGE" || { fail "vm launch"; report; exit $?; }
 inst_push_userdata "$VM" "$REPO_ROOT/cloud-init.yml"; "$INCUS" restart "$VM"

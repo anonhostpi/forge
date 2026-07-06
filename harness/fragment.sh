@@ -11,7 +11,7 @@ incus_available || { skip "incus unavailable"; report; exit $?; }
 FRAGFILE="$REPO_ROOT/write_files/$FRAG"
 [ -f "$FRAGFILE" ] || { skip "fragment $FRAG absent (owning unit pending)"; report; exit $?; }
 
-trap 'instance_delete "$CT"' EXIT
+trap 'inst_delete "$CT"' EXIT
 ct_launch "$CT" "$IMAGE"; sleep 2
 "$INCUS" file push "$FRAGFILE" "$CT/tmp/$FRAG"
 assert_ok "fragment $FRAG applies cleanly" inst_exec "$CT" sh -c "chmod +x /tmp/$FRAG && /tmp/$FRAG"
