@@ -1,0 +1,8 @@
+# see anonhostpi/forge#2
+# The `age` recipient is the CI's age PUBLIC key; the matching private key (AGE_KEY) lives only in
+# GitHub repo Secrets and is used only in the runner. Replace the placeholder with the real recipient.
+creation_rules:
+  - path_regex: (^|/)secrets/.*\.sops\.ya?ml$
+    age: age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs00replace
+  - path_regex: (^|/)config/topology\.sops\.ya?ml$
+    age: age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs00replace

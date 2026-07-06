@@ -1,0 +1,10 @@
+# see anonhostpi/forge#2
+# NON-sensitive config, cleartext by design. No secrets, no sensitive host topology (that is
+# config/topology.sops.yaml). The config-lint gate rejects secret-shaped keys here.
+hostname: seed
+k3s:
+  channel: stable                                      # pinned release channel; bump deliberately
+images:
+  proton_bridge: shenxn/protonmail-bridge@sha256:0000000000000000000000000000000000000000000000000000000000000000  # pin real digest
+charts:
+  forgejo: 12.0.0                                      # project-mirrors/forgejo-helm chart version
