@@ -37,8 +37,10 @@ idempotent replay.
 - **N-1 upgrade** from a prior-release golden image (needs a released image to restore).
 - A **self-hosted KVM runner** for the VM E2E (`full-deploy-e2e` job gated off until then).
 
-**Invariant:** no tier-2 unit merges until its E2E assertion here exists and passes — enforced
-by `HARNESS_REQUIRE` (mechanical) + per-unit review (the skip→assert diff).
+**Invariant:** no tier-2 unit merges until its E2E assertion here exists and passes. Enforced by
+per-unit review (the skip→assert diff) today; the **mechanical** `HARNESS_REQUIRE` leg is **dormant**
+until a KVM runner lands and `full-deploy-e2e`'s `if: ${{ false }}` is flipped (CI-vacuous-until-wired),
+at which point a skipped required unit fails the gate.
 
 ## Substrates & secrets
 - **clean** — fresh VM, first-install. **dirty** — re-apply on a populated box (idempotent replay).

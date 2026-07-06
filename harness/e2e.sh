@@ -24,11 +24,11 @@ grade_end_state() {
   assert_ok "sshd actually listening on :22 (U6)" inst_exec "$VM" sh -c 'ss -ltn | grep -Eq "[:.]22 "'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then
     assert_ok "k3s node Ready (U11)" inst_exec "$VM" sh -c 'kubectl get nodes | grep -qw Ready'
-    # Bracket the metadata block with ONE image over the SAME protocol (TCP:80): a pod CAN reach an allowed
-    # host but NOT metadata. Same-protocol so a broken-TCP-egress cluster fails the positive too (review R2/2).
-    assert_ok    "pod CAN reach an allowed external host over TCP (positive control, U12)" \
-                 inst_exec "$VM" sh -c 'kubectl run pos --rm -i --restart=Never --image=busybox -- wget -T5 -qO- http://example.com/ >/dev/null'
-    assert_fails "pod CANNOT reach metadata 169.254.169.254 over TCP — egress dropped (U9/U12 negative control)" \
+    # Bracket the metadata block: same image, same protocol (TCP:80), both IP LITERALS (no DNS confound) —
+    # a pod CAN reach an allowed IP but NOT metadata, so only the destination differs (review R2/2, R3/F2).
+    assert_ok    "pod CAN reach an allowed external IP over TCP — positive control (U12)" \
+                 inst_exec "$VM" sh -c 'kubectl run pos --rm -i --restart=Never --image=busybox -- wget -T5 -qO- http://1.1.1.1/ >/dev/null'
+    assert_fails "pod CANNOT reach metadata 169.254.169.254 over TCP — egress dropped, negative control (U9) (U12)" \
                  inst_exec "$VM" sh -c 'kubectl run neg --rm -i --restart=Never --image=busybox -- wget -T5 -qO- http://169.254.169.254/ >/dev/null'
   else skip "kubectl absent (U11 pending) — k3s / firewall / metadata asserts deferred"; fi
   skip "Forgejo HTTP 200 + git-SSH clone (U14 pending)"
@@ -40,7 +40,7 @@ grade_end_state
 if [ "$SUBSTRATE" = dirty ]; then
   # Idempotent-replay upgrade path: re-apply the deploy on the populated box and re-grade (review R1/3).
   inst_replay "$VM"
-  if wait_cloud_init "$VM" 600; then pass "cloud-init re-apply on populated box (idempotent replay, U5)"; else fail "re-apply failed (non-idempotent)"; fi
+  if wait_cloud_init "$VM" 600; then pass "cloud-init re-apply on populated box — idempotent replay (U5)"; else fail "re-apply failed (non-idempotent)"; fi
   grade_end_state
   skip "N-1 (previous-release) upgrade compat — pending a prior-release golden image to restore"
 fi

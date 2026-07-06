@@ -28,9 +28,10 @@ report() {
     printf 'GATE FAIL: nothing verified (%d skipped) — a gate run must assert something\n' "$HARNESS_SKIP"; return 1
   fi
   local tok
+  # Anchor to the parenthesized tag so "U1" can't match "(U11)"/"(U12)" (review R3/F1).
   for tok in $HARNESS_REQUIRE; do
     case "$HARNESS_PASSED" in
-      *"$tok"*) ;;
+      *"($tok)"*) ;;
       *) printf 'GATE FAIL: required assertion [%s] did not pass (skipped or absent)\n' "$tok"; return 1 ;;
     esac
   done
