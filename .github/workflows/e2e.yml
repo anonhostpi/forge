@@ -1,0 +1,24 @@
+name: e2e
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  # Always-on: proves the harness itself has teeth (no nested virt needed).
+  harness-selfcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./harness/selfcheck.sh
+
+  # Tier-2 grading gate — needs a KVM-capable (self-hosted) runner. #3 nested-KVM RISK.
+  # Enabled once a KVM runner AND a deployable seed (U5/U11/U14) land.
+  full-deploy-e2e:
+    if: ${{ false }}
+    runs-on: [self-hosted, kvm]
+    strategy:
+      matrix:
+        substrate: [clean, dirty]
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./harness/e2e.sh ${{ matrix.substrate }}
