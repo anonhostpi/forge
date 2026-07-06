@@ -1,30 +1,29 @@
 #!/usr/bin/env bash
-# Negative-control self-check: prove the assertion library actually DETECTS failure.  # #3
-# A green harness that can never fail is worthless (spec #3, finding 8). Needs no incus.
+# see anonhostpi/forge#3
+# Negative-control self-check: prove the assertion library DETECTS failure, incl. gate-mode teeth.
+# A green harness that can never fail is worthless (spec #3 finding 8; review R2/5). Needs no incus.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LIB="$HERE/lib/assert.sh"
+L=". \"$LIB\";"
 rc_all=0
 
-run() { bash -c ". \"$LIB\"; $1; report" >/dev/null 2>&1; }
+expect() { # <want 0|1> <desc> <script>
+  bash -c "$3" >/dev/null 2>&1; local got=$?
+  if { [ "$1" = 0 ] && [ "$got" = 0 ]; } || { [ "$1" != 0 ] && [ "$got" != 0 ]; }; then
+    echo "PASS: $2"
+  else echo "FAIL: $2 (want rc $1, got $got)"; rc_all=1; fi
+}
 
 echo "== harness self-check =="
+expect 1 "injected failure fails report()"            "$L assert_eq bad 1 2; report"
+expect 0 "assert_fails(false) => pass"                "$L assert_fails d false; report"
+expect 1 "assert_fails(true) => fail"                 "$L assert_fails d true; report"
+expect 0 "clean run => zero"                          "$L assert_ok d true; report"
+expect 1 "gate mode: all-skip => fail"                "export HARNESS_GATE=1; $L skip x; report"
+expect 0 "gate mode: one pass => zero"                "export HARNESS_GATE=1; $L assert_ok d true; report"
+expect 1 "gate mode: required token skipped => fail"  "export HARNESS_GATE=1 HARNESS_REQUIRE=U6; $L assert_ok 'd (U9)' true; report"
+expect 0 "gate mode: required token passed => zero"   "export HARNESS_GATE=1 HARNESS_REQUIRE=U6; $L assert_ok 'd (U6)' true; report"
 
-# 1) A run containing a real failure MUST report non-zero.
-if run 'assert_eq "injected-bad" 1 2'; then echo "FAIL: injected failure did not fail report()"; rc_all=1
-else echo "PASS: injected failure => report() non-zero"; fi
-
-# 2) assert_fails treats a FAILING command as a PASS (the negative-control primitive).
-if run 'assert_fails "false-must-fail" false'; then echo "PASS: assert_fails(false) => report() zero"
-else echo "FAIL: assert_fails(false) unexpectedly failed report()"; rc_all=1; fi
-
-# 3) assert_fails treats a SUCCEEDING command as a FAIL (guards the negative control itself).
-if run 'assert_fails "true-should-be-flagged" true'; then echo "FAIL: assert_fails(true) did not flag"; rc_all=1
-else echo "PASS: assert_fails(true) => report() non-zero"; fi
-
-# 4) A clean run MUST report zero.
-if run 'assert_ok "true-ok" true'; then echo "PASS: clean run => report() zero"
-else echo "FAIL: clean run unexpectedly failed report()"; rc_all=1; fi
-
-[ "$rc_all" -eq 0 ] && echo "self-check OK — the harness can distinguish pass from fail" || echo "self-check BROKEN"
+[ "$rc_all" -eq 0 ] && echo "self-check OK — pass/fail detection and gate-mode teeth verified" || echo "self-check BROKEN"
 exit "$rc_all"

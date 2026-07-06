@@ -16,6 +16,9 @@ jobs:
   full-deploy-e2e:
     if: ${{ false }}
     runs-on: [self-hosted, kvm]
+    env:
+      HARNESS_GATE: "1"                            # missing prereq / all-skip / missing-required => FAIL, never green
+      HARNESS_REQUIRE: "U6 U11 U9 U12 U14 U4 U3"   # a skipped required unit fails the gate; tighten as units land
     strategy:
       matrix:
         substrate: [clean, dirty]
