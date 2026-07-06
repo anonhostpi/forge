@@ -24,6 +24,7 @@ expect 1 "gate mode: all-skip => fail"                "export HARNESS_GATE=1; $L
 expect 0 "gate mode: one pass => zero"                "export HARNESS_GATE=1; $L assert_ok d true; report"
 expect 1 "gate mode: required token skipped => fail"  "export HARNESS_GATE=1 HARNESS_REQUIRE=U6; $L assert_ok 'd (U9)' true; report"
 expect 0 "gate mode: required token passed => zero"   "export HARNESS_GATE=1 HARNESS_REQUIRE=U6; $L assert_ok 'd (U6)' true; report"
+expect 1 "gate mode: required U1 does NOT match (U11)"  "export HARNESS_GATE=1 HARNESS_REQUIRE=U1; $L assert_ok 'd (U11)' true; report"
 
 [ "$rc_all" -eq 0 ] && echo "self-check OK — pass/fail detection and gate-mode teeth verified" || echo "self-check BROKEN"
 exit "$rc_all"

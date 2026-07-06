@@ -24,12 +24,14 @@ grade_end_state() {
   assert_ok "sshd actually listening on :22 (U6)" inst_exec "$VM" sh -c 'ss -ltn | grep -Eq "[:.]22 "'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then
     assert_ok "k3s node Ready (U11)" inst_exec "$VM" sh -c 'kubectl get nodes | grep -qw Ready'
-    # Bracket the metadata block: same image, same protocol (TCP:80), both IP LITERALS (no DNS confound) —
-    # a pod CAN reach an allowed IP but NOT metadata, so only the destination differs (review R2/2, R3/F2).
-    assert_ok    "pod CAN reach an allowed external IP over TCP — positive control (U12)" \
-                 inst_exec "$VM" sh -c 'kubectl run pos --rm -i --restart=Never --image=busybox -- wget -T5 -qO- http://1.1.1.1/ >/dev/null'
-    assert_fails "pod CANNOT reach metadata 169.254.169.254 over TCP — egress dropped, negative control (U9) (U12)" \
-                 inst_exec "$VM" sh -c 'kubectl run neg --rm -i --restart=Never --image=busybox -- wget -T5 -qO- http://169.254.169.254/ >/dev/null'
+    # Bracket the metadata block with a raw TCP-connect probe (nc): same pinned image, same protocol depth
+    # (TCP:80, no DNS / no HTTP redirect / no TLS), differ ONLY in destination IP — so a broken-egress cluster
+    # fails the positive too, and only "metadata specifically dropped" passes the negative (R2/2, R3/F2, R4/F1).
+    IMG=busybox:1.37.0
+    assert_ok    "pod CAN reach an allowed external IP over TCP:80 — positive control (U12)" \
+                 inst_exec "$VM" sh -c "kubectl run pos --rm -i --restart=Never --image=$IMG -- sh -c 'nc -w5 1.1.1.1 80 </dev/null'"
+    assert_fails "pod CANNOT reach metadata 169.254.169.254 over TCP:80 — egress dropped, negative control (U9) (U12)" \
+                 inst_exec "$VM" sh -c "kubectl run neg --rm -i --restart=Never --image=$IMG -- sh -c 'nc -w5 169.254.169.254 80 </dev/null'"
   else skip "kubectl absent (U11 pending) — k3s / firewall / metadata asserts deferred"; fi
   skip "Forgejo HTTP 200 + git-SSH clone (U14 pending)"
   skip "CI->seed:22 SSH-push deploy exercised end-to-end (U4 pending)"
