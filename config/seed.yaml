@@ -1,6 +1,4 @@
-# see anonhostpi/forge#2
-# NON-sensitive config, cleartext by design. No secrets, no sensitive host topology (that is
-# config/topology.sops.yaml). The config-lint gate rejects secret-shaped keys here.
+# see anonhostpi/forge#2 — NON-sensitive only; secrets live in secrets/seed.sops.yaml, topology in config/topology.sops.yaml
 hostname: seed
 k3s:
   channel: stable                                      # pinned release channel; bump deliberately

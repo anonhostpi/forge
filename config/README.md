@@ -29,7 +29,7 @@ sops -e secrets/seed.example.yaml    > secrets/seed.sops.yaml
 Set the real CI age recipient in `.sops.yaml` first. The `deploy_ssh.private` key never leaves CI;
 its public half is `deploy/ci_deploy.pub` (U3 bakes it into user-data, U6 authorizes it).
 
-## Lint (`scripts/lint-config.sh`)
+## Lint (`scripts/config-lint.sh`)
 Enforces: (1) every `.sops.yaml`-matched file is actually SOPS-encrypted (no plaintext secret slips
 in); (2) `config/seed.yaml` carries no secret-shaped keys; (3) scope tags present; (4) shapes conform
 to `config/schema.json`. `CONFIG_GATE=1` in CI fails if a validator tool is missing (dev skips it).

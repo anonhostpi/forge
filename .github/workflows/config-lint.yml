@@ -11,4 +11,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install --quiet pyyaml jsonschema
-      - run: ./scripts/lint-config.sh
+      - run: ./scripts/config-lint.sh
