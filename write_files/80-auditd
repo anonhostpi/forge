@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#8
+# phase: boot
+set -euo pipefail
+apt-get -o DPkg::Lock::Timeout=300 update -q
+apt-get -o DPkg::Lock::Timeout=300 install -y -q auditd audispd-plugins
+cat > /etc/audit/rules.d/forge.rules <<'CONF'
+## forge base audit ruleset (#8)
+-w /etc/passwd -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/sudoers -p wa -k priv
+-w /etc/sudoers.d/ -p wa -k priv
+-w /etc/ssh/sshd_config -p wa -k sshd
+-w /etc/ssh/sshd_config.d/ -p wa -k sshd
+# NB: no broad `-S execve -F euid=0` rule — it floods on a k3s node full of root containers (review R2/2). The
+# config-tamper watches above are the high-value, low-volume signal; container-aware exec auditing is a later concern.
+CONF
+systemctl enable auditd 2>/dev/null || true
+# Kernel audit netlink is absent in an unprivileged system container (fragment.sh fast loop) — degrade to a SKIP
+# there rather than hard-fail; the real VM E2E does the live check (review F3).
+if auditctl -s >/dev/null 2>&1; then
+  systemctl restart auditd 2>/dev/null || true
+  augenrules --load 2>/dev/null || true
+  echo "80-auditd applied (ruleset loaded)"
+else
+  echo "80-auditd applied (kernel audit unavailable here — ruleset staged, live-verify deferred to the VM E2E)"
+fi

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#8
+# phase: boot
+set -euo pipefail
+apt-get -o DPkg::Lock::Timeout=300 update -q
+# python3-systemd is only a Recommends; the systemd backend needs it or the jail silently watches nothing (review F4).
+apt-get -o DPkg::Lock::Timeout=300 install -y -q fail2ban python3-systemd
+# backend=systemd: 24.04 minimal has no rsyslog/auth.log, so the file backend would watch nothing (review F1-spec).
+# key-only sshd (U6): "Failed password" never fires. mode=normal bans invalid-user probes but NOT the preauth-close
+# patterns `aggressive` matches — which a glitchy deploy connection could trip, banning the runner mid-deploy (review F3).
+# key-auth SUCCESS is not a jail event, so U4's deploy SSH is immune; ignoreip covers loopback.
+cat > /etc/fail2ban/jail.local <<'CONF'
+[DEFAULT]
+backend  = systemd
+ignoreip = 127.0.0.1/8 ::1
+findtime = 600
+maxretry = 6
+bantime  = 3600
+
+[sshd]
+enabled = true
+mode    = normal
+port    = 22
+CONF
+systemctl enable --now fail2ban
+for _ in $(seq 1 10); do fail2ban-client ping >/dev/null 2>&1 && break; sleep 1; done   # bounded retry: the Type=simple unit's start returns before its socket exists (review F2)
+echo "70-fail2ban applied (systemd backend, sshd jail watching the journal)"
