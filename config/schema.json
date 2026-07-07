@@ -8,7 +8,7 @@
       "required": ["hostname", "k3s", "postgres", "images", "charts", "mail", "firewall"],
       "properties": {
         "hostname": {"type": "string"},
-        "k3s": {"type": "object", "required": ["channel"]},
+        "k3s": {"type": "object", "required": ["channel", "version"]},
         "postgres": {"type": "object", "required": ["host", "port", "name", "user"]},
         "images": {"type": "object", "required": ["proton_bridge"]},
         "charts": {"type": "object", "required": ["forgejo"]},
