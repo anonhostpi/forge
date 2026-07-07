@@ -1,0 +1,55 @@
+name: provision
+# see anonhostpi/forge#4 — owner-gated seed provisioning. workflow_dispatch ONLY (pull_request_target/workflow_run forbidden).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    environment: production          # protected env: required reviewers + default-branch policy live in repo settings (verified below)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: verify protected-environment config      # the keystone control is in repo settings, not YAML (spec F2)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/environments/production" \
+            | python3 -c 'import json,sys; e=json.load(sys.stdin); r=[x["type"] for x in e.get("protection_rules",[])]; assert "required_reviewers" in r, f"production env missing required_reviewers: {r}"; print("env protection ok:", r)'
+
+      - name: install hcloud (version-pinned + checksum-verified)   # spec F3
+        run: |
+          set -euo pipefail
+          ver=1.49.1
+          base="https://github.com/hetznercloud/cli/releases/download/v${ver}"
+          curl -fsSL -o hcloud.tar.gz "${base}/hcloud-linux-amd64.tar.gz"
+          curl -fsSL -o checksums.txt "${base}/checksums.txt"
+          grep 'hcloud-linux-amd64.tar.gz' checksums.txt | sha256sum -c -
+          tar -xzf hcloud.tar.gz hcloud
+          sudo install -m0755 hcloud /usr/local/bin/hcloud
+
+      - name: render cloud-init
+        run: |
+          set -eu                                        # no `set -x` (spec F9): don't echo values into the log
+          ref="${GITHUB_SHA}"                            # F6: the checked-out commit; never a workflow_dispatch input
+          export REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
+          export REF="$ref"
+          export TARBALL_URL="https://github.com/${GITHUB_REPOSITORY}/archive/${ref}.tar.gz"   # F7: immutable full-SHA archive
+          export TARBALL_SHA256="$(curl -fsSL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)"
+          export DEPLOY_PUBKEY="$(cat deploy/ci_deploy.pub)"
+          python3 scripts/render-cloudinit.py > user-data.yml
+          echo "rendered $(wc -c < user-data.yml) bytes"
+
+      - name: provision seed (idempotent recreate)
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}      # spec F1: ONLY HCLOUD_TOKEN — no AGE_KEY, never toJson(secrets)
+        run: |
+          set -eu
+          name=seed
+          hcloud server delete "$name" 2>/dev/null || true       # delete-if-exists then create (dirty-substrate re-run) — F5
+          hcloud server create --name "$name" --type cx22 --image ubuntu-24.04 --location nbg1 \
+            --user-data-from-file user-data.yml
