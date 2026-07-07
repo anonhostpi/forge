@@ -3,7 +3,7 @@
 # Prove render-cloudinit.py: renders + substitutes all placeholders, rejects the placeholder pubkey and a
 # non-40-char SHA, and ESCAPES a shell/YAML metachar so the output stays valid YAML (no injection break-out).
 set -uo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(cd "$HERE/.." && pwd)"; cd "$ROOT"
+HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="$(cd "$HERE/.." && pwd)"; cd "$ROOT" || exit 1
 R="$HERE/render-cloudinit.py"
 rc=0
 sha40="$(printf 'a%.0s' $(seq 1 40))"

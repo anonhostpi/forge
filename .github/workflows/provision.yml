@@ -39,8 +39,8 @@ jobs:
           export REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
           export REF="$ref"
           export TARBALL_URL="https://github.com/${GITHUB_REPOSITORY}/archive/${ref}.tar.gz"   # F7: immutable full-SHA archive
-          export TARBALL_SHA256="$(curl -fsSL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)"
-          export DEPLOY_PUBKEY="$(cat deploy/ci_deploy.pub)"
+          TARBALL_SHA256="$(curl -fsSL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)"; export TARBALL_SHA256
+          DEPLOY_PUBKEY="$(cat deploy/ci_deploy.pub)"; export DEPLOY_PUBKEY
           python3 scripts/render-cloudinit.py > user-data.yml
           echo "rendered $(wc -c < user-data.yml) bytes"
 

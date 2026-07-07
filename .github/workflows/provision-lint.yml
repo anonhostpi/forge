@@ -26,9 +26,10 @@ jobs:
         run: |
           set -euo pipefail
           f=.github/workflows/provision.yml
-          ! grep -q 'toJson' "$f"                               || { echo "FAIL: uses toJson(secrets)"; exit 1; }
-          ! grep -Eq 'pull_request_target|workflow_run' "$f"    || { echo "FAIL: forbidden trigger"; exit 1; }
-          grep -q 'workflow_dispatch' "$f"                      || { echo "FAIL: not workflow_dispatch"; exit 1; }
-          grep -q 'environment:' "$f"                           || { echo "FAIL: no environment"; exit 1; }
-          ! grep -q 'AGE_KEY' "$f"                              || { echo "FAIL: provision references AGE_KEY (U4's, not U3's)"; exit 1; }
+          code="$(sed 's/#.*//' "$f")"                          # strip comments — a comment that NAMES the forbidden thing is fine
+          if grep -q 'toJson' <<<"$code"; then echo "FAIL: uses toJson(secrets)"; exit 1; fi
+          if grep -Eq 'pull_request_target|workflow_run' <<<"$code"; then echo "FAIL: forbidden trigger"; exit 1; fi
+          if ! grep -q 'workflow_dispatch' <<<"$code"; then echo "FAIL: not workflow_dispatch"; exit 1; fi
+          if ! grep -q 'environment:' <<<"$code"; then echo "FAIL: no environment"; exit 1; fi
+          if grep -q 'AGE_KEY' <<<"$code"; then echo "FAIL: references AGE_KEY (U4's, not U3's)"; exit 1; fi
           echo "provision.yml security posture ok"
