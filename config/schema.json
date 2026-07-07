@@ -5,13 +5,14 @@
     "seed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hostname", "k3s", "postgres", "images", "charts"],
+      "required": ["hostname", "k3s", "postgres", "images", "charts", "mail"],
       "properties": {
         "hostname": {"type": "string"},
         "k3s": {"type": "object", "required": ["channel"]},
         "postgres": {"type": "object", "required": ["host", "port", "name", "user"]},
         "images": {"type": "object", "required": ["proton_bridge"]},
-        "charts": {"type": "object", "required": ["forgejo"]}
+        "charts": {"type": "object", "required": ["forgejo"]},
+        "mail": {"type": "object", "required": ["to", "bridge_smtp_port"]}
       }
     },
     "topology": {

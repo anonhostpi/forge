@@ -30,6 +30,10 @@ grade_end_state() {
   assert_ok "fail2ban systemd backend, not dead file backend (U7)" inst_exec "$VM" sh -c 'grep -Eq "backend *= *systemd" /etc/fail2ban/jail.local'
   assert_ok "auditd running + forge ruleset loaded (U7)" inst_exec "$VM" sh -c 'systemctl is-active auditd | grep -qx active && auditctl -l 2>/dev/null | grep -q identity'
   assert_ok "podman + rootless forge-bridge, subuid distinct from forge-deploy (U7)" inst_exec "$VM" sh -c 'command -v podman >/dev/null && b="$(awk -F: "/^forge-bridge:/{print \$2}" /etc/subuid)"; d="$(awk -F: "/^forge-deploy:/{print \$2}" /etc/subuid)"; [ -n "$b" ] && [ "$b" != "$d" ]'
+  assert_ok "sendmail resolves to the msmtpq queue wrapper (U8)" inst_exec "$VM" sh -c 'readlink -f "$(command -v sendmail)" | grep -q forge-sendmail'
+  assert_ok "msmtprc valid + NO host SMTP secret (U8)"           inst_exec "$VM" sh -c 'msmtp --pretend >/dev/null 2>&1 && ! grep -qiE "password|^auth +on" /etc/msmtprc'
+  assert_ok "msmtpq flush timer enabled (U8)"                    inst_exec "$VM" sh -c 'systemctl is-enabled msmtpq-flush.timer | grep -qx enabled'
+  assert_ok "pre-Bridge mail SPOOLS, not lost (U8)"              inst_exec "$VM" sh -c 'printf "To: root\nSubject: t\n\nx\n" | sendmail root >/dev/null 2>&1; ls /var/spool/msmtpq 2>/dev/null | grep -q .'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then
     assert_ok "k3s node Ready (U11)" inst_exec "$VM" sh -c 'kubectl get nodes | grep -qw Ready'
     # Bracket the metadata block with a raw TCP-connect probe (nc): same pinned image, same protocol depth

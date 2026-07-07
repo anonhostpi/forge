@@ -11,3 +11,6 @@ images:
   proton_bridge: shenxn/protonmail-bridge@sha256:0000000000000000000000000000000000000000000000000000000000000000  # pin real digest
 charts:
   forgejo: 12.0.0                                      # project-mirrors/forgejo-helm chart version
+mail:                                                  # forge#9 — host critical-mail (u-u / fail2ban) via msmtp
+  to: root@localhost                                   # operator recipient; set a real deliverable address
+  bridge_smtp_port: 1025                               # U8<->U10 contract: msmtp relays to the Proton Bridge on 127.0.0.1:<this>

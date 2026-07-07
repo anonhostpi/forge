@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#9
+# phase: boot
+# Host critical-mail transport. sendmail -> msmtpq (queue wrapper) so a mail to a DOWN Proton Bridge (U10) SPOOLS
+# instead of being lost (plain msmtp has no retry — review F1); a timer flushes the spool once the Bridge is up.
+# Relay is LOCAL (127.0.0.1) so NO Proton/external SMTP credential ever lands on the host.
+set -euo pipefail
+systemctl stop apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true   # free the dpkg lock (like 60-upgrades); timers re-arm on reboot
+apt-get -o DPkg::Lock::Timeout=300 update -q
+apt-get -o DPkg::Lock::Timeout=300 install -y -q msmtp
+
+# non-secret recipient + Bridge port from config (the U8<->U10 contract)
+operator="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["to"])')"
+port="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["bridge_smtp_port"])')"
+
+# tls off + auth off: loopback traffic never leaves the host, and the Bridge's self-signed cert wouldn't validate
+# against the system CA anyway (review F4). root:root 0600 — no `msmtp` group exists, `chown root:msmtp` would abort (F3).
+cat > /etc/msmtprc <<CONF
+defaults
+logfile /var/log/msmtp.log
+aliases /etc/aliases
+
+account bridge
+host 127.0.0.1
+port ${port}
+tls off
+auth off
+from seed@$(hostname -f 2>/dev/null || hostname)
+
+account default : bridge
+CONF
+chmod 0600 /etc/msmtprc
+chown root:root /etc/msmtprc
+
+# bare `root` / fail2ban mail -> the operator, else Proton can't deliver a domainless recipient (review F2)
+cat > /etc/aliases <<ALIASES
+root: ${operator}
+default: ${operator}
+ALIASES
+
+# System spool + the msmtpq queue wrapper as the sendmail alternative (review F1).
+install -d -m 0700 /var/spool/msmtpq
+cat > /etc/msmtpq.conf <<'CONF'
+MSMTPQ_Q=/var/spool/msmtpq
+MSMTPQ_LOG=/var/log/msmtpq.log
+CONF
+cat > /usr/local/sbin/forge-sendmail <<'WRAP'
+#!/bin/sh
+# see anonhostpi/forge#9 — a mail to a down Bridge spools here instead of being lost
+set -a; . /etc/msmtpq.conf; set +a
+exec /usr/bin/msmtpq "$@"
+WRAP
+chmod 0755 /usr/local/sbin/forge-sendmail
+update-alternatives --install /usr/sbin/sendmail sendmail /usr/local/sbin/forge-sendmail 40
+
+# Flush the spool on boot + every 5 min — delivers queued critical mail once the Bridge (U10) is up.
+cat > /etc/systemd/system/msmtpq-flush.service <<'UNIT'
+[Unit]
+Description=Flush the msmtp mail queue
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/msmtpq.conf
+ExecStart=/usr/bin/msmtp-queue -r
+UNIT
+cat > /etc/systemd/system/msmtpq-flush.timer <<'UNIT'
+[Unit]
+Description=Periodic msmtp queue flush
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now msmtpq-flush.timer
+
+msmtp --version >/dev/null
+echo "55-msmtp applied (sendmail -> msmtpq queue -> Bridge 127.0.0.1:${port}; flush timer active; root -> ${operator})"
