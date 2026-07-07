@@ -4,11 +4,13 @@
 set -euo pipefail
 apt-get -o DPkg::Lock::Timeout=300 update -q
 apt-get -o DPkg::Lock::Timeout=300 install -y -q podman uidmap
-# Dedicated NON-sudo system user for the rootless Proton Bridge (review F2) — never forge-deploy (which has NOPASSWD sudo).
+# Dedicated NON-sudo user for the rootless Proton Bridge (review F2) — never forge-deploy (which has NOPASSWD sudo).
 user=forge-bridge
-id "$user" >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin "$user"
-# Idempotent subuid/subgid (usermod --add is a no-op if already present) + linger so the rootless service survives logout.
-grep -q "^${user}:" /etc/subuid || usermod --add-subuids 100000-165535 "$user"
-grep -q "^${user}:" /etc/subgid || usermod --add-subgids 100000-165535 "$user"
+# Regular (NOT --system) user so useradd AUTO-ALLOCATES a free subuid/subgid range — never forge-deploy's block
+# (review F1: hardcoding 100000-165535 collided with forge-deploy's auto-allocated block, defeating the isolation).
+id "$user" >/dev/null 2>&1 || useradd --create-home --shell /usr/sbin/nologin "$user"
+# Fallback only for a pre-existing user missing a range: a distinct HIGH base, never the 100000 block forge-deploy owns.
+grep -q "^${user}:" /etc/subuid || usermod --add-subuids 300000-365535 "$user"
+grep -q "^${user}:" /etc/subgid || usermod --add-subgids 300000-365535 "$user"
 loginctl enable-linger "$user"
 echo "90-podman applied (podman + rootless-ready $user; U10 configures the Bridge container)"
