@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # see anonhostpi/forge#6
-# usage: setup.sh [--only <NN-name>] [--phase boot|full|all]
-# Applies write_files/ fragments in lexical (NN-prefix) order. Fail-fast. Idempotent iff each fragment is.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"; cd "$ROOT"
 FRAG_DIR="${SETUP_FRAG_DIR:-$ROOT/write_files}"
