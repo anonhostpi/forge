@@ -1,0 +1,25 @@
+#!/usr/sbin/nft -f
+# see anonhostpi/forge#10 — SINGLE SOURCE: rendered by write_files/95-firewall at boot AND nft -c'd in CI by
+# scripts/firewall-lint.sh (so the security-critical ruleset has an executed parse check — review F1).
+# `ip saddr __POD__` INPUT accept is the CNI-bridge-name-INDEPENDENT backstop to `iifname "cni0"` (review F4);
+# together they let pods reach ALL host-listening ports (kubelet/apiserver) — the intentional single-node F1
+# tradeoff (pod->host is deliberately unrestricted so pod->apiserver survives; hostNetwork metadata note in 95, F5/F7).
+table inet forge
+delete table inet forge
+table inet forge {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    iifname "cni0" accept
+    ip saddr __POD__ accept
+    ip saddr __SVC__ accept
+    ip protocol icmp accept
+    ip6 nexthdr icmpv6 accept
+    tcp dport { __PORTS__ } accept
+  }
+  chain forward {
+    type filter hook forward priority filter; policy accept;
+    __META__
+  }
+}

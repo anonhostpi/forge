@@ -18,31 +18,11 @@ drop="$(python3 -c 'import yaml; print(str(yaml.safe_load(open("config/seed.yaml
 meta_rule=""
 [ "$drop" = true ] && meta_rule="ip saddr ${pod} ip daddr 169.254.169.254 drop"
 
-# Idempotent atomic apply of ONLY the forge table: `table inet forge` adds it if absent, `delete` then removes it, then
-# the full definition recreates it — all in one `nft -f` transaction. Never touches k3s's tables.
-cat > /etc/forge-firewall.nft <<NFT
-#!/usr/sbin/nft -f
-table inet forge
-delete table inet forge
-table inet forge {
-  chain input {
-    type filter hook input priority filter; policy drop;
-    iifname "lo" accept
-    ct state established,related accept
-    iifname "cni0" accept
-    ip saddr ${pod} accept
-    ip saddr ${svc} accept
-    ip protocol icmp accept
-    ip6 nexthdr icmpv6 accept
-    tcp dport { ${ports} } accept
-  }
-  chain forward {
-    type filter hook forward priority filter; policy accept;
-    ${meta_rule}
-  }
-}
-NFT
-nft -f /etc/forge-firewall.nft
+# Render the ruleset from the SINGLE-SOURCE template (also nft -c'd in CI by scripts/firewall-lint.sh — review F1).
+# The template's `table/delete/recreate` idiom is the idempotent atomic replace of ONLY the forge table (never the
+# whole ruleset, so k3s's tables survive). The service below applies it via `enable --now` (no redundant direct apply, F6).
+sed -e "s|__POD__|${pod}|g" -e "s|__SVC__|${svc}|g" -e "s|__PORTS__|${ports}|g" -e "s|__META__|${meta_rule}|g" \
+  write_files/forge-firewall.nft.tmpl > /etc/forge-firewall.nft
 
 # Apply on boot + re-assert every 2 min vs a k3s/kube-router reconcile (the dedicated table should survive; belt-and-suspenders).
 cat > /etc/systemd/system/forge-firewall.service <<'UNIT'

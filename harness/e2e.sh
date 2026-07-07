@@ -36,6 +36,8 @@ grade_end_state() {
   assert_ok "pre-Bridge mail SPOOLS, not lost (U8)"              inst_exec "$VM" sh -c 'printf "To: root\nSubject: t\n\nx\n" | sendmail root >/dev/null 2>&1; ls /var/spool/msmtpq 2>/dev/null | grep -q .'
   assert_ok "forge nft table present, INPUT default-drop (U9)"   inst_exec "$VM" sh -c 'nft list table inet forge 2>/dev/null | grep -q "hook input" && nft list table inet forge | grep -Eq "policy drop"'
   assert_ok "external 6443 not in the INPUT allow-set (U9)"      inst_exec "$VM" sh -c '! nft list table inet forge | grep -Eq "dport \{[^}]*6443"'
+  # This textual assert is the SUBSTANTIVE metadata check in incus; the pod nc->169.254.169.254 negative below is
+  # vacuous off-Hetzner (nothing listens there regardless), so it needs real Hetzner or an injected listener (review F2).
   assert_ok "FORWARD pod->metadata drop rule present (U9)"       inst_exec "$VM" sh -c 'nft list table inet forge | grep -Eq "169\.254\.169\.254 drop"'
   assert_ok "forge firewall re-assert timer enabled (U9)"        inst_exec "$VM" sh -c 'systemctl is-enabled forge-firewall.timer | grep -qx enabled'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then
