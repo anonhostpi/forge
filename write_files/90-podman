@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#8
+# phase: boot
+set -euo pipefail
+apt-get -o DPkg::Lock::Timeout=300 update -q
+apt-get -o DPkg::Lock::Timeout=300 install -y -q podman uidmap
+# Dedicated NON-sudo system user for the rootless Proton Bridge (review F2) — never forge-deploy (which has NOPASSWD sudo).
+user=forge-bridge
+id "$user" >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin "$user"
+# Idempotent subuid/subgid (usermod --add is a no-op if already present) + linger so the rootless service survives logout.
+grep -q "^${user}:" /etc/subuid || usermod --add-subuids 100000-165535 "$user"
+grep -q "^${user}:" /etc/subgid || usermod --add-subgids 100000-165535 "$user"
+loginctl enable-linger "$user"
+echo "90-podman applied (podman + rootless-ready $user; U10 configures the Bridge container)"

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#8
+# phase: boot
+set -euo pipefail
+# Stop the apt-daily timers for the provisioning window so a triggered unattended-upgrades run can't hold the
+# dpkg lock for minutes against 70/80/90 (review F4). They re-arm on next boot.
+systemctl stop apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+apt-get -o DPkg::Lock::Timeout=300 update -q
+apt-get -o DPkg::Lock::Timeout=300 install -y -q unattended-upgrades
+
+cat > /etc/apt/apt.conf.d/50unattended-upgrades <<'CONF'
+Unattended-Upgrade::Allowed-Origins {
+        "${distro_id}:${distro_codename}-security";
+        "${distro_id}ESMApps:${distro_codename}-apps-security";
+        "${distro_id}ESM:${distro_codename}-infra-security";
+};
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Mail "root";
+Unattended-Upgrade::MailReport "on-change";
+CONF
+cat > /etc/apt/apt.conf.d/20auto-upgrades <<'CONF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+CONF
+echo "60-upgrades applied (security-only, no auto-reboot; kernel-reboot gap tracked #27; mail native+best-effort until U8)"

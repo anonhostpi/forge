@@ -25,6 +25,11 @@ grade_end_state() {
   assert_ok "root SSH login disabled (U6)" inst_exec "$VM" sh -c 'sshd -T 2>/dev/null | grep -qx "permitrootlogin no"'
   assert_ok "forge-deploy has NOPASSWD sudo (U6)"   inst_exec "$VM" sh -c 'sudo -l -U forge-deploy 2>/dev/null | grep -q NOPASSWD'
   assert_ok "rp_filter loose for flannel (U6)"      inst_exec "$VM" sh -c '[ "$(sysctl -n net.ipv4.conf.all.rp_filter)" = 2 ]'
+  assert_ok "unattended-upgrades security-only, no auto-reboot (U7)" inst_exec "$VM" sh -c 'grep -Eq "Automatic-Reboot \"false\"" /etc/apt/apt.conf.d/50unattended-upgrades'
+  assert_ok "fail2ban active + sshd jail up (U7)"   inst_exec "$VM" sh -c 'systemctl is-active fail2ban | grep -qx active && fail2ban-client status sshd >/dev/null 2>&1'
+  assert_ok "fail2ban systemd backend, not dead file backend (U7)" inst_exec "$VM" sh -c 'grep -Eq "backend *= *systemd" /etc/fail2ban/jail.local'
+  assert_ok "auditd running (U7)"                   inst_exec "$VM" sh -c 'systemctl is-active auditd | grep -qx active'
+  assert_ok "podman + rootless forge-bridge user (U7)" inst_exec "$VM" sh -c 'command -v podman >/dev/null && id forge-bridge >/dev/null 2>&1 && grep -q "^forge-bridge:" /etc/subuid'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then
     assert_ok "k3s node Ready (U11)" inst_exec "$VM" sh -c 'kubectl get nodes | grep -qw Ready'
     # Bracket the metadata block with a raw TCP-connect probe (nc): same pinned image, same protocol depth
