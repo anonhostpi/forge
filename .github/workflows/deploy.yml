@@ -33,7 +33,8 @@ jobs:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}    # spec F2: U4 needs BOTH AGE_KEY + HCLOUD_TOKEN (stable-IP that removes this is #25)
         run: |
           set -euo pipefail
-          echo "SEED_IP=$(hcloud server ip seed)" >> "$GITHUB_ENV"
+          ip="$(hcloud server ip seed)"          # assignment form propagates an hcloud failure under set -e (review F-1); `echo "$(...)"` would not
+          echo "SEED_IP=$ip" >> "$GITHUB_ENV"
 
       - name: deploy (SSH-push; plaintext piped, never on disk or in logs)
         env:

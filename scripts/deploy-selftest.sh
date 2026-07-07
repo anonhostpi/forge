@@ -46,5 +46,11 @@ grep -q '6443' "$sshlog" "$sshin" 2>/dev/null && { echo "FAIL: apiserver 6443 co
 [ "$(cat "$addlog" 2>/dev/null)" = "-" ] && echo "PASS: deploy key loaded from stdin (no key file)" || { echo "FAIL: ssh-add not stdin: [$(cat "$addlog" 2>/dev/null)]"; rc=1; }
 if grep -rl 'FAKE-OPENSSH-PRIVATE-KEY' "$tmp" 2>/dev/null | grep -qv '/bin/'; then echo "FAIL: key plaintext found on disk"; rc=1; else echo "PASS: no key plaintext left on disk"; fi
 
+if PATH="$bin:$PATH" AGE_KEY=x SEED_IP=203.0.113.5 MANIFEST_DIR="$tmp/nope" SECRETS_FILE="$tmp/s" bash scripts/deploy.sh >/dev/null 2>&1; then
+  echo "FAIL: missing MANIFEST_DIR not rejected"; rc=1; else echo "PASS: missing MANIFEST_DIR rejected (misconfig, F-2)"; fi
+edir="$tmp/empty"; mkdir -p "$edir"
+if PATH="$bin:$PATH" AGE_KEY=x SEED_IP=203.0.113.5 MANIFEST_DIR="$edir" SECRETS_FILE="$tmp/s" bash scripts/deploy.sh >/dev/null 2>&1; then
+  echo "PASS: empty MANIFEST_DIR is intentional (exit 0, F-2)"; else echo "FAIL: empty dir should exit 0"; rc=1; fi
+
 [ "$rc" = 0 ] && echo "deploy selftest OK — pipes to :22, loads key from stdin, never touches 6443" || echo "deploy selftest BROKEN"
 exit "$rc"

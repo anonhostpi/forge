@@ -13,10 +13,11 @@ MANIFEST_DIR="${MANIFEST_DIR:-deploy/manifests}"          # scope:cluster SOPS-e
 SECRETS_FILE="${SECRETS_FILE:-secrets/seed.sops.yaml}"
 export SOPS_AGE_KEY="$AGE_KEY"
 
+[ -d "$MANIFEST_DIR" ] || { echo "MANIFEST_DIR '$MANIFEST_DIR' does not exist — misconfigured path (review F-2)" >&2; exit 1; }
 shopt -s nullglob
 manifests=("$MANIFEST_DIR"/*.sops.yaml)                   # scope:cluster ONLY; the ci-only deploy_ssh key is NEVER in this stream (F6)
 if [ ${#manifests[@]} -eq 0 ]; then
-  echo "no scope:cluster manifests in $MANIFEST_DIR yet (U13/U14 add them); nothing to deploy"
+  echo "no scope:cluster manifests in $MANIFEST_DIR yet (U13/U14 add them); nothing to deploy"   # dir exists but empty = intentional pre-U13/U14
   exit 0
 fi
 
