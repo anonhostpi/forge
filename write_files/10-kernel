@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#7
+# phase: boot
+set -euo pipefail
+# br_netfilter + overlay must load BEFORE the bridge-nf sysctls exist (else sysctl --system errors on a fresh box).
+printf 'br_netfilter\noverlay\n' > /etc/modules-load.d/forge.conf
+modprobe br_netfilter overlay 2>/dev/null || true
+cat > /etc/sysctl.d/60-forge.conf <<'SYSCTL'
+# hardening (k3s-safe: rp_filter LOOSE not strict, forwarding ON)
+net.ipv4.conf.all.rp_filter = 2
+net.ipv4.conf.default.rp_filter = 2
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.tcp_syncookies = 1
+kernel.kptr_restrict = 1
+# flannel / pod networking
+net.ipv4.ip_forward = 1
+net.ipv4.conf.all.forwarding = 1
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+# k3s / containerd exhaust the inotify defaults -> crashloop
+fs.inotify.max_user_instances = 8192
+fs.inotify.max_user_watches = 524288
+SYSCTL
+sysctl --system >/dev/null
+echo "10-kernel applied"
