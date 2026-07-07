@@ -19,6 +19,7 @@ runcmd:                                    # cloud-init runs this block under /b
     if git clone --depth 1 "$repo" "$dir" && git -C "$dir" fetch --depth 1 origin "$ref" && git -C "$dir" checkout -q FETCH_HEAD; then
       :
     else                                   # fallback: sha256-verified tarball (the clone path gets integrity from git)
+      command -v curl >/dev/null 2>&1 || { apt-get update -q && apt-get install -y -q curl; }
       rm -rf "$dir"; mkdir -p "$dir"; tmp="$(mktemp)"
       curl -fsSL "$turl" -o "$tmp"
       echo "$tsha  $tmp" | sha256sum -c -

@@ -30,6 +30,13 @@ printf 'just data\n' > "$fdir/40-data"   # not executable
 if SETUP_FRAG_DIR="$fdir" OUT="$tmp/x" "$SETUP" >/dev/null 2>&1; then echo "FAIL: non-executable fragment not rejected"; rc=1
 else echo "PASS: non-executable (data) fragment rejected"; fi
 
+pdir="$tmp/phase"; mkdir -p "$pdir"
+printf '#!/usr/bin/env bash\n# phase: boot\nprintf B >> "$OUT"\n' > "$pdir/50-boot"; chmod +x "$pdir/50-boot"
+printf '#!/usr/bin/env bash\n# phase: full\nprintf F >> "$OUT"\n' > "$pdir/60-full"; chmod +x "$pdir/60-full"
+OUT="$tmp/phaseout"; : > "$OUT"
+if SETUP_FRAG_DIR="$pdir" OUT="$OUT" "$SETUP" --phase boot >/dev/null 2>&1 && [ "$(cat "$OUT")" = B ]; then
+  echo "PASS: --phase boot runs only boot-phase fragments"; else echo "FAIL: phase=[$(cat "$OUT" 2>/dev/null)]"; rc=1; fi
+
 sz=$(wc -c < "$ROOT/cloud-init.yml")   # spec #6 finding 8: enforce the Hetzner ~32 KiB user-data cap
 if [ "$sz" -lt 32768 ]; then echo "PASS: cloud-init.yml $sz B < 32 KiB cap"; else echo "FAIL: cloud-init.yml $sz B >= 32768"; rc=1; fi
 
