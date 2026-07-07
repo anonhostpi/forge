@@ -36,7 +36,7 @@ jobs:
 
       - name: render cloud-init
         run: |
-          set -eu                                        # no `set -x` (spec F9): don't echo values into the log
+          set -euo pipefail                              # pipefail: a curl failure in the sha pipe must not yield the empty-string digest (review R2/2). No `set -x` (F9).
           pip install --quiet pyyaml                     # render-cloudinit.py needs PyYAML; don't rely on it being ambient (review F-A)
           ref="${GITHUB_SHA}"                            # F6: the checked-out commit; never a workflow_dispatch input
           export REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
@@ -56,6 +56,8 @@ jobs:
           # Dirty-substrate re-run recreates the seed. It is a STATELESS bootstrap box (config re-derives from the
           # repo + U4's post-boot push; no attached volumes / irreplaceable data in scope), so destroy-then-create
           # is safe. Delete ONLY if it exists; a real delete failure aborts (not swallowed by `|| true`). Review F-D.
+          # NOTE (R2/3): recreate mints a NEW public IP — data is stateless, but anything pinned to the old IP
+          # (DNS, firewall allowlists, known_hosts) needs re-resolution. Expected for a bootstrap seed.
           if hcloud server describe "$name" >/dev/null 2>&1; then hcloud server delete "$name"; fi
           hcloud server create --name "$name" --type cx22 --image ubuntu-24.04 --location nbg1 \
             --user-data-from-file user-data.yml
