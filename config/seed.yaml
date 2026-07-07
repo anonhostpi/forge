@@ -1,7 +1,8 @@
 # see anonhostpi/forge#2 — NON-sensitive only; secrets live in secrets/seed.sops.yaml, topology in config/topology.sops.yaml
 hostname: seed
 k3s:
-  channel: stable                                      # pinned release channel; bump deliberately
+  channel: stable                                      # documented fallback; `version` below is the actual pin (forge#12)
+  version: v1.31.5+k3s1                                 # PINNED INSTALL_K3S_VERSION — reproducible; bump deliberately to a current release
 postgres:                                              # NON-sensitive connection coords (passwords are in secrets/)
   host: forgejo-postgres
   port: 5432

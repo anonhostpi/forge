@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#12
+# phase: boot
+# k3s via the official installer, PINNED to seed.yaml k3s.version (reproducible; a moving channel would silently upgrade
+# the cluster + its kine store on a re-provision — review F1). STOCK defaults: kine/SQLite control-plane store (NOT
+# Forgejo's Postgres), local-path storage, bundled Traefik, Klipper ServiceLB, kube-router NetworkPolicy (default-on).
+# Runs LAST (after host hardening + the k8s-aware firewall U9). kubeconfig stays 0600 root (cluster-admin; U4/E2E sudo).
+# secrets.k3s.token is NOT consumed — single-node auto-tokens, and secrets never ride user-data; it is reserved for a
+# future multi-node agent-join (review F2). The bounded wait proves NODE-Ready only; pod->apiserver/CoreDNS is the E2E's (F3).
+set -euo pipefail
+
+# k3s needs a real kernel (cgroups/systemd/networking). In a system CONTAINER (the fragment.sh fast loop) it can't run,
+# so skip here; the real-VM E2E does the live install + verify (like 80-auditd's container degrade). If the tool is
+# absent the `if` is false -> install proceeds, which is the correct outcome on a VM (review R1/1).
+if systemd-detect-virt --container --quiet 2>/dev/null; then
+  echo "99-k3s: system container detected — k3s needs a VM; install + node-Ready check deferred to the real-VM E2E"
+  exit 0
+fi
+
+ver="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["k3s"]["version"])')"
+
+# Idempotent: the pin makes a re-run a no-op (not a silent upgrade). The installer sha256-verifies the pinned binary.
+if command -v k3s >/dev/null 2>&1 && k3s --version 2>/dev/null | grep -qF "$ver"; then
+  echo "99-k3s: already at ${ver}"
+else
+  # Bounded retry around the boot-time download — a transient network blip shouldn't hard-fail the whole provision (review R1/2).
+  installed=""
+  for _ in 1 2 3; do
+    curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="$ver" sh -s - && { installed=1; break; }
+    sleep 5
+  done
+  [ "$installed" = 1 ] || { echo "99-k3s: k3s install failed after 3 attempts" >&2; exit 1; }
+fi
+
+# Poll-and-early-exit for node Ready (bounded ~120s); a broken install FAILS the fragment, never a hollow "installed".
+ready=""
+for _ in $(seq 1 60); do
+  k3s kubectl get nodes 2>/dev/null | grep -qw Ready && { ready=1; break; }
+  sleep 2
+done
+[ "$ready" = 1 ] || { echo "99-k3s: node did not reach Ready within ~120s" >&2; exit 1; }
+echo "99-k3s applied (k3s ${ver}, node Ready)"
