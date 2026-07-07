@@ -8,21 +8,10 @@
 set -euo pipefail
 apt-get -o DPkg::Lock::Timeout=300 install -y -q nftables
 
-ports="$(python3 -c 'import yaml; print(", ".join(str(p) for p in yaml.safe_load(open("config/seed.yaml"))["firewall"]["allowed_input_ports"]))')"
-pod="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["firewall"]["pod_cidr"])')"
-svc="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["firewall"]["service_cidr"])')"
-drop="$(python3 -c 'import yaml; print(str(yaml.safe_load(open("config/seed.yaml"))["firewall"]["drop_metadata"]).lower())')"
-
-# The metadata drop covers NON-hostNetwork pods only; hostNetwork/privileged pods reach IMDS via host OUTPUT (unblocked —
-# the host itself may need IMDS). Accepted: workload pods are the target, hostNetwork infra is trusted (review F7). v4-only (F8).
-meta_rule=""
-[ "$drop" = true ] && meta_rule="ip saddr ${pod} ip daddr 169.254.169.254 drop"
-
-# Render the ruleset from the SINGLE-SOURCE template (also nft -c'd in CI by scripts/firewall-lint.sh — review F1).
-# The template's `table/delete/recreate` idiom is the idempotent atomic replace of ONLY the forge table (never the
-# whole ruleset, so k3s's tables survive). The service below applies it via `enable --now` (no redundant direct apply, F6).
-sed -e "s|__POD__|${pod}|g" -e "s|__SVC__|${svc}|g" -e "s|__PORTS__|${ports}|g" -e "s|__META__|${meta_rule}|g" \
-  write_files/forge-firewall.nft.tmpl > /etc/forge-firewall.nft
+# Render the ruleset via the SHARED renderer (the SAME one CI nft -c's — review R2/1, so lint == what boots). The
+# template's table/delete/recreate idiom atomically replaces ONLY the forge table (k3s's tables survive). The service
+# below applies it via `enable --now` (no redundant direct apply, F6).
+bash write_files/render-firewall.sh > /etc/forge-firewall.nft
 
 # Apply on boot + re-assert every 2 min vs a k3s/kube-router reconcile (the dedicated table should survive; belt-and-suspenders).
 cat > /etc/systemd/system/forge-firewall.service <<'UNIT'
@@ -48,4 +37,4 @@ systemctl daemon-reload
 systemctl enable --now forge-firewall.service forge-firewall.timer
 
 nft list table inet forge >/dev/null
-echo "95-firewall applied (INPUT drop except lo/cni0/pod/svc/${ports}; FORWARD metadata drop=${drop}; re-assert timer active)"
+echo "95-firewall applied (forge nft table: INPUT drop except lo/cni0/pod/svc/allowed-ports; FORWARD metadata block; re-assert timer active)"
