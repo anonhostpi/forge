@@ -1,0 +1,54 @@
+# see anonhostpi/forge#14 — daily pg_dump to a local PVC (STAGING). The OFF-BOX push to a real target is operator-config
+# (secrets.backup) + E2E-verified in #32 — single-node local backup alone is worthless (same disk). pg_dump here is
+# DB-only, Forgejo-INDEPENDENT (restore-anytime), distinct from U14's `gitea dump` (repos+config+DB, needs Forgejo up) —
+# review F6; distinct schedule so the two don't collide. forgejo is the POSTGRES_USER superuser (app_password);
+# superuser_password in the Secret is reserved for a future app/admin role split.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-postgres-backup
+  namespace: forge
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: forgejo-postgres-backup
+  namespace: forge
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 999
+            fsGroup: 999
+          containers:
+            - name: pgdump
+              image: postgres:16@sha256:fe03a7605299a34ddf5e4f285dff78c3d7190a576b3c6b46f2fcff69f4bffd54
+              env:
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: forgejo-postgres
+                      key: app_password
+              command: ["/bin/sh", "-c"]
+              args:
+                - 'set -eu; out="/backup/forgejo-$(date +%F-%H%M).sql.gz"; pg_dump -h forgejo-postgres -U forgejo forgejo | gzip > "$out"; echo "dumped $out"; ls -1t /backup/*.sql.gz | tail -n +15 | xargs -r rm -f'
+              volumeMounts:
+                - name: backup
+                  mountPath: /backup
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: forgejo-postgres-backup

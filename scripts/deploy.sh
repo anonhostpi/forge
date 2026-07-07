@@ -15,9 +15,12 @@ export SOPS_AGE_KEY="$AGE_KEY"
 
 [ -d "$MANIFEST_DIR" ] || { echo "MANIFEST_DIR '$MANIFEST_DIR' does not exist — misconfigured path (review F-2)" >&2; exit 1; }
 shopt -s nullglob
-manifests=("$MANIFEST_DIR"/*.sops.yaml)                   # scope:cluster ONLY; the ci-only deploy_ssh key is NEVER in this stream (F6)
-if [ ${#manifests[@]} -eq 0 ]; then
-  echo "no scope:cluster manifests in $MANIFEST_DIR yet (U13/U14 add them); nothing to deploy"   # dir exists but empty = intentional pre-U13/U14
+# Two globs (U13 F3): plaintext NON-secret workloads (*.yaml, excluding *.sops.yaml + *.example.yaml templates) and
+# SOPS-encrypted secrets (*.sops.yaml). k8s-lint forbids a `kind: Secret` in a plaintext *.yaml.
+plain=(); for f in "$MANIFEST_DIR"/*.yaml; do case "$f" in *.sops.yaml|*.example.yaml) ;; *) plain+=("$f") ;; esac; done
+enc=("$MANIFEST_DIR"/*.sops.yaml)
+if [ ${#plain[@]} -eq 0 ] && [ ${#enc[@]} -eq 0 ]; then
+  echo "no manifests in $MANIFEST_DIR yet (U13/U14 add them); nothing to deploy"   # dir exists but empty = intentional
   exit 0
 fi
 
@@ -26,8 +29,15 @@ eval "$(ssh-agent -s)" >/dev/null
 trap 'ssh-agent -k >/dev/null 2>&1 || true' EXIT
 "$SOPS_CMD" -d --extract '["deploy_ssh"]["private"]' "$SECRETS_FILE" | ssh-add - 2>/dev/null
 
-# The manifest stream = ONLY in-repo SOPS-decrypted content, ZERO workflow-context interpolation (F8) — root kubectl can't become RCE.
-stream() { local f; for f in "${manifests[@]}"; do "$SOPS_CMD" -d "$f"; echo "---"; done; }
+# The manifest stream = ONLY in-repo content (plaintext workloads + SOPS-decrypted secrets), ZERO workflow-context
+# interpolation — root kubectl can't become RCE (F8, restated for the plaintext path). Plaintext FIRST (Namespace +
+# workloads), then secrets: the StatefulSet pod CreateContainerConfigError-retries until its Secret in the same batch
+# lands — self-heals, no restart (U13 F3).
+stream() {
+  local f
+  for f in "${plain[@]}"; do cat "$f"; echo "---"; done
+  for f in "${enc[@]}"; do "$SOPS_CMD" -d "$f"; echo "---"; done
+}
 
 # pipefail (F4): a decrypt failure must not be masked by ssh's exit; the remote kubectl exit propagates back through ssh.
 # accept-new: first-contact host-key window is a tracked risk (#25). partial-apply is re-run-recoverable, not atomic (F4).

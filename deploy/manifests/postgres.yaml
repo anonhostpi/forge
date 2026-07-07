@@ -1,0 +1,79 @@
+# see anonhostpi/forge#14 — NON-secret Postgres workload (StatefulSet + Service). Applied by U4's deploy.sh (plaintext
+# path). The creds Secret rides deploy/manifests/postgres.sops.yaml (operator sops-encrypts postgres-secret.example.yaml).
+# POSTGRES_USER/DB are hardcoded to match seed.yaml postgres.{user,name} (the plaintext path has no render step — review F7).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forge
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forgejo-postgres          # matches seed.yaml postgres.host; bare name resolves same-namespace (review F4)
+  namespace: forge
+spec:
+  clusterIP: None                 # headless for the StatefulSet
+  selector:
+    app: forgejo-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: forgejo-postgres
+  namespace: forge
+spec:
+  serviceName: forgejo-postgres
+  replicas: 1                     # single-node, no HA/replication (epic bar)
+  selector:
+    matchLabels:
+      app: forgejo-postgres
+  template:
+    metadata:
+      labels:
+        app: forgejo-postgres
+    spec:
+      securityContext:            # postgres runs as uid 999; fsGroup makes the local-path PV group-writable (review F5)
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16@sha256:fe03a7605299a34ddf5e4f285dff78c3d7190a576b3c6b46f2fcff69f4bffd54
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: forgejo
+            - name: POSTGRES_DB
+              value: forgejo
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata   # subdir — dodges the non-empty-mountpoint initdb failure (review F5)
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo-postgres               # the Secret (via *.sops.yaml); pod CreateContainerConfigError-retries until it lands (F3)
+                  key: app_password
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "forgejo"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:           # STS claim — the PVC is retained on STS delete, right for a DB (review F5)
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

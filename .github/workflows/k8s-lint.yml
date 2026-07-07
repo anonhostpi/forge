@@ -1,0 +1,15 @@
+name: k8s-lint
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  kubeconform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          ver=0.6.7
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/v${ver}/kubeconform-linux-amd64.tar.gz" | tar -xz kubeconform
+          sudo install -m0755 kubeconform /usr/local/bin/kubeconform
+      - run: ./scripts/k8s-lint.sh

@@ -8,3 +8,5 @@ creation_rules:
     age: age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs00replace
   - path_regex: (^|/)config/topology\.sops\.ya?ml$
     age: age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs00replace
+  - path_regex: (^|/)deploy/manifests/.*\.sops\.ya?ml$   # forge#14 — the creds Secrets U4 decrypts + applies
+    age: age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs00replace

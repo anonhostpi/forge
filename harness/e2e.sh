@@ -52,7 +52,16 @@ grade_end_state() {
                  inst_exec "$VM" sh -c "kubectl run pos --rm -i --restart=Never --image=$IMG -- sh -c 'nc -w5 1.1.1.1 80 </dev/null'"
     assert_fails "pod CANNOT reach metadata 169.254.169.254 over TCP:80 — egress dropped, negative control (U9) (U12)" \
                  inst_exec "$VM" sh -c "kubectl run neg --rm -i --restart=Never --image=$IMG -- sh -c 'nc -w5 169.254.169.254 80 </dev/null'"
-  else skip "kubectl absent (U11 pending) — k3s / firewall / metadata asserts deferred"; fi
+    # U13 Postgres — requires the deploy flow (U4 SSH-push of the workload + Secret) to have run. Persistence: a sentinel
+    # row written on the clean deploy must survive the DIRTY-substrate reboot via the local-path PVC (review F2).
+    assert_ok "Postgres pod Ready (U13)" \
+              inst_exec "$VM" sh -c 'kubectl -n forge wait --for=condition=ready pod -l app=forgejo-postgres --timeout=120s >/dev/null 2>&1'
+    inst_exec "$VM" sh -c "kubectl -n forge exec statefulset/forgejo-postgres -- psql -U forgejo -c \"CREATE TABLE IF NOT EXISTS forge_persist(id int PRIMARY KEY); INSERT INTO forge_persist VALUES(1) ON CONFLICT DO NOTHING;\"" >/dev/null 2>&1 || true
+    assert_ok "Postgres data persists across dirty reboot — sentinel row survives (U13)" \
+              inst_exec "$VM" sh -c "kubectl -n forge exec statefulset/forgejo-postgres -- psql -U forgejo -tAc 'SELECT count(*) FROM forge_persist' | grep -q 1"
+    assert_ok "Postgres backup CronJob present (U13)" \
+              inst_exec "$VM" sh -c 'kubectl -n forge get cronjob forgejo-postgres-backup >/dev/null 2>&1'
+  else skip "kubectl absent (U11 pending) — k3s / firewall / metadata / postgres asserts deferred"; fi
   skip "Forgejo HTTP 200 + git-SSH clone (U14 pending)"
   skip "CI->seed:22 SSH-push deploy exercised end-to-end (U4 pending)"
   skip "user-data secret scrub-on-boot asserted (U3/U4 pending)"
