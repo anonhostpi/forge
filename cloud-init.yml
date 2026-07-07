@@ -1,0 +1,24 @@
+#cloud-config
+# see anonhostpi/forge#6
+# TEMPLATE — U3's provision workflow renders {{...}} (repo URL, pinned ref/SHA, tarball URL+sha256, deploy pubkey).
+# Thin bootstrap (Hetzner user-data cap ~32 KiB): clone the pinned ref, then run setup.sh. No secrets here
+# (public repo); only the CI deploy PUBLIC key. Real host config arrives post-boot via U4's SSH push.
+users:
+  - name: forge-deploy                     # deploy hook; U6 owns the real user model
+    ssh_authorized_keys:
+      - "{{DEPLOY_PUBKEY}}"
+runcmd:                                     # runcmd (once, post-network) — not bootcmd (early, pre-network)
+  - |
+    set -euo pipefail
+    repo="{{REPO_URL}}"; ref="{{REF}}"; turl="{{TARBALL_URL}}"; tsha="{{TARBALL_SHA256}}"; dir=/opt/forge
+    command -v git >/dev/null 2>&1 || { apt-get update -q && apt-get install -y -q git; }
+    rm -rf "$dir"                          # replay-safe: dirty-substrate re-run must not clone into a non-empty dir
+    if git clone --depth 1 "$repo" "$dir" && git -C "$dir" fetch --depth 1 origin "$ref" && git -C "$dir" checkout -q FETCH_HEAD; then
+      :
+    else                                   # fallback: sha256-verified tarball (git gives the clone path integrity for free)
+      rm -rf "$dir"; mkdir -p "$dir"; tmp="$(mktemp)"
+      curl -fsSL "$turl" -o "$tmp"
+      echo "$tsha  $tmp" | sha256sum -c -
+      tar -xzf "$tmp" -C "$dir" --strip-components=1
+    fi
+    "$dir/setup.sh" --phase boot           # first boot: cleartext config only; U4 re-runs --phase full post-push

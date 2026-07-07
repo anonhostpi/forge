@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#6
+# phase: boot
+# Example fragment documenting the NN-name convention: executable, idempotent (re-run safe), fail-fast.
+# Real host fragments land in U6-U9 (10-kernel, 20-ssh, ...). Applied by setup.sh from the repo root.
+set -euo pipefail
+install -d -m 0755 /run/forge
+: > /run/forge/00-example.applied          # truncate-create: idempotent, safe on the dirty-substrate replay
+echo "00-example applied"
