@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#10
+# phase: boot
+# On-box firewall in a DEDICATED `table inet forge` (separate from k3s's iptables-nft tables, so a k3s reconcile never
+# flushes it). INPUT default-drop but ACCEPTS cluster-internal (lo + cni0 + pod/service CIDR) so pod->apiserver is NOT
+# bricked (review F1/F2); 6443 refused EXTERNALLY. FORWARD policy accept + a single pod->IMDS metadata drop. This file
+# manages ONLY the forge table and NEVER `flush ruleset` (which would nuke k3s's own tables — review F3).
+set -euo pipefail
+apt-get -o DPkg::Lock::Timeout=300 install -y -q nftables
+
+ports="$(python3 -c 'import yaml; print(", ".join(str(p) for p in yaml.safe_load(open("config/seed.yaml"))["firewall"]["allowed_input_ports"]))')"
+pod="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["firewall"]["pod_cidr"])')"
+svc="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["firewall"]["service_cidr"])')"
+drop="$(python3 -c 'import yaml; print(str(yaml.safe_load(open("config/seed.yaml"))["firewall"]["drop_metadata"]).lower())')"
+
+# The metadata drop covers NON-hostNetwork pods only; hostNetwork/privileged pods reach IMDS via host OUTPUT (unblocked —
+# the host itself may need IMDS). Accepted: workload pods are the target, hostNetwork infra is trusted (review F7). v4-only (F8).
+meta_rule=""
+[ "$drop" = true ] && meta_rule="ip saddr ${pod} ip daddr 169.254.169.254 drop"
+
+# Idempotent atomic apply of ONLY the forge table: `table inet forge` adds it if absent, `delete` then removes it, then
+# the full definition recreates it — all in one `nft -f` transaction. Never touches k3s's tables.
+cat > /etc/forge-firewall.nft <<NFT
+#!/usr/sbin/nft -f
+table inet forge
+delete table inet forge
+table inet forge {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    iifname "cni0" accept
+    ip saddr ${pod} accept
+    ip saddr ${svc} accept
+    ip protocol icmp accept
+    ip6 nexthdr icmpv6 accept
+    tcp dport { ${ports} } accept
+  }
+  chain forward {
+    type filter hook forward priority filter; policy accept;
+    ${meta_rule}
+  }
+}
+NFT
+nft -f /etc/forge-firewall.nft
+
+# Apply on boot + re-assert every 2 min vs a k3s/kube-router reconcile (the dedicated table should survive; belt-and-suspenders).
+cat > /etc/systemd/system/forge-firewall.service <<'UNIT'
+[Unit]
+Description=Apply the forge nftables firewall (INPUT policy + metadata block)
+After=network-pre.target
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/forge-firewall.nft
+[Install]
+WantedBy=multi-user.target
+UNIT
+cat > /etc/systemd/system/forge-firewall.timer <<'UNIT'
+[Unit]
+Description=Re-assert the forge firewall vs a k3s reconcile
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now forge-firewall.service forge-firewall.timer
+
+nft list table inet forge >/dev/null
+echo "95-firewall applied (INPUT drop except lo/cni0/pod/svc/${ports}; FORWARD metadata drop=${drop}; re-assert timer active)"

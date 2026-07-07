@@ -5,23 +5,23 @@
     "seed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hostname", "k3s", "postgres", "images", "charts", "mail"],
+      "required": ["hostname", "k3s", "postgres", "images", "charts", "mail", "firewall"],
       "properties": {
         "hostname": {"type": "string"},
         "k3s": {"type": "object", "required": ["channel"]},
         "postgres": {"type": "object", "required": ["host", "port", "name", "user"]},
         "images": {"type": "object", "required": ["proton_bridge"]},
         "charts": {"type": "object", "required": ["forgejo"]},
-        "mail": {"type": "object", "required": ["to", "bridge_smtp_port"]}
+        "mail": {"type": "object", "required": ["to", "bridge_smtp_port"]},
+        "firewall": {"type": "object", "required": ["allowed_input_ports", "pod_cidr", "service_cidr", "drop_metadata"]}
       }
     },
     "topology": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ssh", "firewall", "fail2ban", "network"],
+      "required": ["ssh", "fail2ban", "network"],
       "properties": {
         "ssh": {"type": "object", "required": ["admin_port", "git_port"]},
-        "firewall": {"type": "object", "required": ["allowed_input_ports", "drop_metadata"]},
         "fail2ban": {"type": "object", "required": ["bantime", "findtime", "maxretry"]},
         "network": {"type": "object", "required": ["fqdn_scheme"]}
       }

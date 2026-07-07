@@ -5,9 +5,8 @@
 ssh:
   admin_port: 22
   git_port: 2222
-firewall:
-  allowed_input_ports: [22, 2222, 80]
-  drop_metadata: true
+# NB: host-firewall knobs moved to the CLEARTEXT config/seed.yaml (forge#10) — the box can't decrypt this
+# SOPS topology at boot (age key stays in CI), and ports/pod-CIDR are non-secret defense-in-depth, not obscurity.
 fail2ban:
   bantime: 3600
   findtime: 600

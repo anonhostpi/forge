@@ -14,3 +14,8 @@ charts:
 mail:                                                  # forge#9 — host critical-mail (u-u / fail2ban) via msmtp
   to: root@localhost                                   # operator recipient; set a real deliverable address
   bridge_smtp_port: 1025                               # U8<->U10 contract: msmtp relays to the Proton Bridge on 127.0.0.1:<this>
+firewall:                                              # forge#10 — NON-secret host firewall knobs (the box can't decrypt SOPS at boot)
+  allowed_input_ports: [22, 2222, 80]                  # sshd / git-SSH (Klipper) / HTTP (Klipper)
+  pod_cidr: 10.42.0.0/16                               # k3s default pod CIDR
+  service_cidr: 10.43.0.0/16                           # k3s default service CIDR
+  drop_metadata: true                                  # block pod -> 169.254.169.254 (Hetzner IMDS)
