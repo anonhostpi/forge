@@ -12,7 +12,8 @@ cat > /etc/audit/rules.d/forge.rules <<'CONF'
 -w /etc/sudoers.d/ -p wa -k priv
 -w /etc/ssh/sshd_config -p wa -k sshd
 -w /etc/ssh/sshd_config.d/ -p wa -k sshd
--a always,exit -F arch=b64 -S execve -F euid=0 -k rootcmd
+# NB: no broad `-S execve -F euid=0` rule — it floods on a k3s node full of root containers (review R2/2). The
+# config-tamper watches above are the high-value, low-volume signal; container-aware exec auditing is a later concern.
 CONF
 systemctl enable auditd 2>/dev/null || true
 # Kernel audit netlink is absent in an unprivileged system container (fragment.sh fast loop) — degrade to a SKIP
