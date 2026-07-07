@@ -19,5 +19,5 @@ ct_launch "$CT" "$IMAGE" || { fail "container launch ($CT)"; report; exit $?; }
 sleep 2
 "$INCUS" file push -r "$REPO_ROOT/write_files" "$CT/root/"
 "$INCUS" file push "$REPO_ROOT/setup.sh" "$CT/root/setup.sh"
-assert_ok "fragment $FRAG applies via setup.sh" inst_exec "$CT" sh -c "cd /root && sh setup.sh --only '$FRAG'"
+assert_ok "fragment $FRAG applies via setup.sh" inst_exec "$CT" sh -c "cd /root && bash setup.sh --only '$FRAG'"
 report; exit $?

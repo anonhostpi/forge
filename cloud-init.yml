@@ -1,0 +1,28 @@
+#cloud-config
+# see anonhostpi/forge#6
+# TEMPLATE — U3's provision workflow renders {{...}}. Two contracts U3 MUST honor:
+#   - {{REF}} is a FULL 40-char commit SHA (fetch-by-SHA needs a reachable full SHA).
+#   - every rendered value is shell-quoted / YAML-escaped (they land in a shell + a YAML scalar; an
+#     unescaped " / $() / newline is root RCE or malformed cloud-config).
+# Thin bootstrap (Hetzner user-data cap ~32 KiB, asserted in scripts/setup-selftest.sh): clone the pinned ref,
+# run setup.sh. No secrets (public repo); only the CI deploy PUBLIC key. Real host config arrives post-boot via U4.
+users:
+  - name: forge-deploy                     # deploy hook; U6 grants this user the privilege U4 needs for --phase full
+    ssh_authorized_keys:
+      - "{{DEPLOY_PUBKEY}}"
+runcmd:                                    # cloud-init runs this block under /bin/sh (dash) — POSIX only, NOT bash
+  - |
+    set -eu
+    repo="{{REPO_URL}}"; ref="{{REF}}"; turl="{{TARBALL_URL}}"; tsha="{{TARBALL_SHA256}}"; dir=/opt/forge
+    command -v git >/dev/null 2>&1 || { apt-get update -q && apt-get install -y -q git; }
+    rm -rf "$dir"                          # replay-safe: dirty-substrate re-run must not clone into a non-empty dir
+    if git clone --depth 1 "$repo" "$dir" && git -C "$dir" fetch --depth 1 origin "$ref" && git -C "$dir" checkout -q FETCH_HEAD; then
+      :
+    else                                   # fallback: sha256-verified tarball (the clone path gets integrity from git)
+      command -v curl >/dev/null 2>&1 || { apt-get update -q && apt-get install -y -q curl; }
+      rm -rf "$dir"; mkdir -p "$dir"; tmp="$(mktemp)"
+      curl -fsSL "$turl" -o "$tmp"
+      echo "$tsha  $tmp" | sha256sum -c -
+      tar -xzf "$tmp" -C "$dir" --strip-components=1
+    fi
+    bash "$dir/setup.sh" --phase boot      # setup.sh needs bash (pipefail/local/shopt) — run it explicitly under bash
