@@ -30,5 +30,8 @@ printf 'just data\n' > "$fdir/40-data"   # not executable
 if SETUP_FRAG_DIR="$fdir" OUT="$tmp/x" "$SETUP" >/dev/null 2>&1; then echo "FAIL: non-executable fragment not rejected"; rc=1
 else echo "PASS: non-executable (data) fragment rejected"; fi
 
+sz=$(wc -c < "$ROOT/cloud-init.yml")   # spec #6 finding 8: enforce the Hetzner ~32 KiB user-data cap
+if [ "$sz" -lt 32768 ]; then echo "PASS: cloud-init.yml $sz B < 32 KiB cap"; else echo "FAIL: cloud-init.yml $sz B >= 32768"; rc=1; fi
+
 [ "$rc" = 0 ] && echo "setup.sh selftest OK — it applies, selects, and bites" || echo "setup.sh selftest BROKEN"
 exit "$rc"
