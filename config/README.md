@@ -6,30 +6,32 @@ The single secret system + the config schema every downstream unit renders again
 | Path | State | Holds |
 | --- | --- | --- |
 | `.sops.yaml` | cleartext | SOPS `creation_rules` (age recipient + which paths encrypt) |
-| `config/seed.yaml` | cleartext | NON-sensitive config (hostname, version pins, image digests, chart versions) |
-| `config/topology.sops.yaml` | **SOPS** | sensitive host posture (ports, firewall, fail2ban, fqdn scheme) — operator-created |
-| `secrets/seed.sops.yaml` | **SOPS** | service credentials, `scope`-tagged — operator-created |
+| `config/seed.yaml` | cleartext | NON-sensitive config (hostname, version pins, image digest, chart version, postgres coords) |
+| `config/topology.sops.yaml` | **SOPS** | sensitive host posture (ports, firewall, fail2ban, fqdn) — operator-created |
+| `secrets/seed.sops.yaml` | **SOPS** | service credentials, `scope`-keyed — operator-created |
 | `config/schema.json` | cleartext | JSON Schema for all three (the contract) |
-| `deploy/ci_deploy.pub` | cleartext | CI deploy **public** key (public keys are not secret) |
-| `*.example.yaml` | cleartext | shape templates with placeholder values (not `.sops.yaml`-matched) |
+| `deploy/ci_deploy.pub` | cleartext | CI deploy **public** key |
+| `*.example.yaml` | cleartext | shape templates (placeholder values) |
 
-`AGE_KEY` (age private key) and `HCLOUD_TOKEN` are **GitHub repo Secrets**, referenced by name
-(never `toJson`); `AGE_KEY` never leaves the runner.
+`AGE_KEY` + `HCLOUD_TOKEN` are **GitHub repo Secrets** (by name, never `toJson`); `AGE_KEY` never leaves the runner.
 
-## Scope tags (the U4 contract)
-Every secret group is tagged `scope: ci-only | cluster`. **ci-only** (`deploy_ssh`) is NEVER
-rendered into a k8s Secret or mounted in-cluster; **cluster** (`forgejo`/`postgres`/`proton`/`k3s`)
-is rendered and SSH-pushed to the box by U4.
+## Scope (the U4 contract) — a DATA key, not a comment
+Every secret group carries `scope: ci-only | cluster` as a **real key** — comments are invisible to
+`yaml.safe_load` (which U4 uses to filter). **ci-only** (`deploy_ssh`) is NEVER rendered into a k8s
+Secret / mounted in-cluster; **cluster** (`forgejo`/`postgres`/`proton`/`k3s`) is rendered and SSH-pushed by U4.
 
 ## Creating the encrypted files
+Set the real CI age recipient in `.sops.yaml` first, then:
 ```
-sops -e config/topology.example.yaml > config/topology.sops.yaml   # then edit real values with `sops`
+sops -e config/topology.example.yaml > config/topology.sops.yaml
 sops -e secrets/seed.example.yaml    > secrets/seed.sops.yaml
 ```
-Set the real CI age recipient in `.sops.yaml` first. The `deploy_ssh.private` key never leaves CI;
-its public half is `deploy/ci_deploy.pub` (U3 bakes it into user-data, U6 authorizes it).
+`deploy_ssh.private` never leaves CI; its public half is `deploy/ci_deploy.pub` (U3 bakes it into user-data, U6 authorizes it).
 
 ## Lint (`scripts/config-lint.sh`)
-Enforces: (1) every `.sops.yaml`-matched file is actually SOPS-encrypted (no plaintext secret slips
-in); (2) `config/seed.yaml` carries no secret-shaped keys; (3) scope tags present; (4) shapes conform
-to `config/schema.json`. `CONFIG_GATE=1` in CI fails if a validator tool is missing (dev skips it).
+Coverage is keyed to **location, not filename**: every non-`*.example.yaml` file in the secret area
+(`secrets/**`, `config/topology*`) must pass **`sops --verify`** — a misnamed plaintext secret
+(`secrets/seed.yaml`) cannot evade it. Also enforced: no secret-shaped key in **any** cleartext config,
+`scope` present on every group, shapes conform to `config/schema.json`, and the placeholder recipient is
+rejected once real secrets exist. `CONFIG_GATE=1` in CI fails on a missing tool (`sops`/validator).
+`scripts/config-lint-selftest.sh` proves the lint rejects a planted plaintext secret — run in CI so it can't rot broken.

@@ -2,6 +2,11 @@
 hostname: seed
 k3s:
   channel: stable                                      # pinned release channel; bump deliberately
+postgres:                                              # NON-sensitive connection coords (passwords are in secrets/)
+  host: forgejo-postgres
+  port: 5432
+  name: forgejo
+  user: forgejo
 images:
   proton_bridge: shenxn/protonmail-bridge@sha256:0000000000000000000000000000000000000000000000000000000000000000  # pin real digest
 charts:

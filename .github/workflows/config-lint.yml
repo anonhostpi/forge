@@ -7,8 +7,14 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     env:
-      CONFIG_GATE: "1"          # in CI, a missing validator tool FAILS (never silently skips)
+      CONFIG_GATE: "1"          # in CI, a missing validator/sops FAILS (never silently skips)
     steps:
       - uses: actions/checkout@v4
       - run: pip install --quiet pyyaml jsonschema
-      - run: ./scripts/config-lint.sh
+      - name: install sops
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/sops" https://github.com/getsops/sops/releases/download/v3.9.1/sops-v3.9.1.linux.amd64
+          sudo install -m0755 "$RUNNER_TEMP/sops" /usr/local/bin/sops
+          sops --version
+      - run: ./scripts/config-lint-selftest.sh    # the lint bites
+      - run: ./scripts/config-lint.sh             # the repo passes its own lint

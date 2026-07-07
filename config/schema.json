@@ -5,10 +5,11 @@
     "seed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["hostname", "k3s", "images", "charts"],
+      "required": ["hostname", "k3s", "postgres", "images", "charts"],
       "properties": {
         "hostname": {"type": "string"},
         "k3s": {"type": "object", "required": ["channel"]},
+        "postgres": {"type": "object", "required": ["host", "port", "name", "user"]},
         "images": {"type": "object", "required": ["proton_bridge"]},
         "charts": {"type": "object", "required": ["forgejo"]}
       }
@@ -25,15 +26,15 @@
       }
     },
     "secrets": {
+      "$comment": "no additionalProperties:false — a SOPS-decrypted file retains a top-level `sops:` metadata key",
       "type": "object",
-      "additionalProperties": false,
       "required": ["deploy_ssh", "forgejo", "postgres", "proton", "k3s"],
       "properties": {
-        "deploy_ssh": {"type": "object", "required": ["private", "user"]},
-        "forgejo": {"type": "object", "required": ["admin_user", "admin_email", "admin_password", "secret_key", "internal_token", "ssh_host_key"]},
-        "postgres": {"type": "object", "required": ["app_password", "superuser_password"]},
-        "proton": {"type": "object", "required": ["username", "bridge_password"]},
-        "k3s": {"type": "object", "required": ["token"]}
+        "deploy_ssh": {"type": "object", "required": ["scope", "private", "user"]},
+        "forgejo": {"type": "object", "required": ["scope", "admin_user", "admin_email", "admin_password", "secret_key", "internal_token", "ssh_host_key", "mailer_from", "mailer_password"]},
+        "postgres": {"type": "object", "required": ["scope", "app_password", "superuser_password"]},
+        "proton": {"type": "object", "required": ["scope", "username", "bridge_password"]},
+        "k3s": {"type": "object", "required": ["scope", "token"]}
       }
     }
   }
