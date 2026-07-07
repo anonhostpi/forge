@@ -18,6 +18,10 @@ printf 'forgejo:\n  admin_password: hunter2\n' > "$tmp/secrets/seed.yaml"
 expect_fail "misnamed plaintext secret in secret area (secrets/seed.yaml)"
 rm -f "$tmp/secrets/seed.yaml"
 
+printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n' > "$tmp/secrets/id_ed25519"
+expect_fail "extensionless plaintext key in secret area (secrets/id_ed25519)"
+rm -f "$tmp/secrets/id_ed25519"
+
 printf 'api_token: abc\n' >> "$tmp/config/seed.yaml"
 expect_fail "secret-shaped key in a cleartext config file"
 cp "$REAL/config/seed.yaml" "$tmp/config/seed.yaml"
