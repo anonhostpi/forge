@@ -13,7 +13,7 @@ secret_shape='(password|passwd|secret|token|api[_-]?key|access[_-]?key|credentia
 is_example() { case "$1" in *.example.yaml|*.example.yml|*.example) return 0;; *) return 1;; esac; }
 
 # 1. Placeholder recipient rejected once ANY real encrypted secret exists (secrets/** or encrypted topology).
-real_secret="$( { find "$ROOT/secrets" -type f ! -name '*.example.*' 2>/dev/null
+real_secret="$( { find "$ROOT/secrets" -type f ! -name '*.example.*' ! -name '*.example' 2>/dev/null
                   find "$ROOT/config" -type f -name 'topology*.sops.y*ml' 2>/dev/null; } | head -1)"
 if [ -n "$real_secret" ] && grep -Eq 'age1[a-z0-9]*(replace|00000)' "$ROOT/.sops.yaml"; then
   FAIL ".sops.yaml has a placeholder age recipient but real encrypted secrets exist — replace it"
