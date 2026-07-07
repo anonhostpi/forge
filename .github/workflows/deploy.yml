@@ -1,0 +1,42 @@
+name: deploy
+# see anonhostpi/forge#5 — owner-gated SSH-push deploy. workflow_dispatch ONLY (pull_request_target/workflow_run forbidden).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production          # protected env: required reviewers, verified at runtime (mirrors provision.yml)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: verify protected-environment config
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/environments/production" \
+            | python3 -c 'import json,sys; e=json.load(sys.stdin); r=[x["type"] for x in e.get("protection_rules",[])]; assert "required_reviewers" in r, f"production env missing required_reviewers: {r}"; print("env protection ok:", r)'
+
+      - name: install sops + age + hcloud (version-pinned)   # checksum caveat carried in #24 (same-origin); version pin is the control
+        run: |
+          set -euo pipefail
+          sv=3.9.1; curl -fsSL -o sops "https://github.com/getsops/sops/releases/download/v${sv}/sops-v${sv}.linux.amd64"; sudo install -m0755 sops /usr/local/bin/sops
+          av=1.2.0; curl -fsSL -o age.tgz "https://github.com/FiloSottile/age/releases/download/v${av}/age-v${av}-linux-amd64.tar.gz"; tar -xzf age.tgz age/age; sudo install -m0755 age/age /usr/local/bin/age
+          hv=1.49.1; curl -fsSL -o hcloud.tgz "https://github.com/hetznercloud/cli/releases/download/v${hv}/hcloud-linux-amd64.tar.gz"; tar -xzf hcloud.tgz hcloud; sudo install -m0755 hcloud /usr/local/bin/hcloud
+
+      - name: resolve seed IP
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}    # spec F2: U4 needs BOTH AGE_KEY + HCLOUD_TOKEN (stable-IP that removes this is #25)
+        run: |
+          set -euo pipefail
+          ip="$(hcloud server ip seed)"          # assignment form propagates an hcloud failure under set -e (review F-1); `echo "$(...)"` would not
+          echo "SEED_IP=$ip" >> "$GITHUB_ENV"
+
+      - name: deploy (SSH-push; plaintext piped, never on disk or in logs)
+        env:
+          AGE_KEY: ${{ secrets.AGE_KEY }}              # decrypts in-runner; never toJson(secrets)
+        run: ./scripts/deploy.sh                       # deploy.sh: set -euo pipefail, no `set -x`; SEED_IP from $GITHUB_ENV

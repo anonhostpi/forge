@@ -1,0 +1,35 @@
+name: deploy-lint
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  deploy-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/deploy-selftest.sh
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+      - run: ./actionlint
+
+  deploy-posture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: deploy.yml + deploy.sh must keep the secret-delivery posture
+        run: |
+          set -euo pipefail
+          y=.github/workflows/deploy.yml; s=scripts/deploy.sh
+          ycode="$(sed 's/#.*//' "$y")"; scode="$(sed 's/#.*//' "$s")"   # strip comments (a comment NAMING the forbidden thing is fine)
+          if grep -q 'toJson' <<<"$ycode"; then echo "FAIL: deploy.yml uses toJson(secrets)"; exit 1; fi
+          if grep -Eq 'pull_request_target|workflow_run' <<<"$ycode"; then echo "FAIL: forbidden trigger"; exit 1; fi
+          if ! grep -q 'workflow_dispatch' <<<"$ycode"; then echo "FAIL: not workflow_dispatch"; exit 1; fi
+          if ! grep -q 'environment:' <<<"$ycode"; then echo "FAIL: no environment"; exit 1; fi
+          if grep -qE '6443|--server' <<<"$scode"; then echo "FAIL: deploy.sh contacts the apiserver (6443/--server) — must be SSH-only"; exit 1; fi
+          if ! grep -q 'ssh-add -' <<<"$scode"; then echo "FAIL: deploy.sh must load the key via 'ssh-add -' (stdin, no disk)"; exit 1; fi
+          echo "deploy secret-delivery posture ok"
