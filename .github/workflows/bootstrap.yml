@@ -9,3 +9,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ./scripts/setup-selftest.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+      - run: shellcheck -S warning setup.sh scripts/*.sh write_files/[0-9]*

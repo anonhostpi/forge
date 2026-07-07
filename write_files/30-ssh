@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#7
+# phase: boot
+# Runs AFTER 20-users (the forge-deploy key path exists before we disable password/root auth).
+set -euo pipefail
+install -d -m 0755 /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/60-forge.conf <<'SSHD'
+# host admin SSH stays on :22; keys only, no root. Crypto left at distro defaults (the seed-anon client).
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+SSHD
+sshd -t                                              # validate before reload — never reload a broken config (lockout)
+# No `|| true`: a failed reload would leave the OLD permissive sshd live while reporting success (review F2).
+systemctl reload-or-restart ssh 2>/dev/null || systemctl reload-or-restart sshd
+echo "30-ssh applied"

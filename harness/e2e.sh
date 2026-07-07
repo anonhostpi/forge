@@ -22,6 +22,9 @@ if wait_cloud_init "$VM" 600; then pass "cloud-init reached status=done (first i
 # unit named in HARNESS_REQUIRE FAILS in gate mode, so a staged skip cannot false-green that unit (review R2/1,3).
 grade_end_state() {
   assert_ok "sshd actually listening on :22 (U6)" inst_exec "$VM" sh -c 'ss -ltn | grep -Eq "[:.]22 "'
+  assert_ok "root SSH login disabled (U6)" inst_exec "$VM" sh -c 'sshd -T 2>/dev/null | grep -qx "permitrootlogin no"'
+  assert_ok "forge-deploy has NOPASSWD sudo (U6)"   inst_exec "$VM" sh -c 'sudo -l -U forge-deploy 2>/dev/null | grep -q NOPASSWD'
+  assert_ok "rp_filter loose for flannel (U6)"      inst_exec "$VM" sh -c '[ "$(sysctl -n net.ipv4.conf.all.rp_filter)" = 2 ]'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then
     assert_ok "k3s node Ready (U11)" inst_exec "$VM" sh -c 'kubectl get nodes | grep -qw Ready'
     # Bracket the metadata block with a raw TCP-connect probe (nc): same pinned image, same protocol depth

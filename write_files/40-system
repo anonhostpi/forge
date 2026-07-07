@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#7
+# phase: boot
+set -euo pipefail
+timedatectl set-timezone UTC 2>/dev/null || ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+locale -a 2>/dev/null | grep -qi 'en_US.utf8' || locale-gen en_US.UTF-8 >/dev/null 2>&1 || true
+update-locale LANG=en_US.UTF-8 2>/dev/null || true
+echo "40-system applied"

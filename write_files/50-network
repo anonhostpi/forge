@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#7
+# phase: boot
+# CWD = repo root (setup.sh cd's there). python3 + PyYAML — a hard cloud-init dependency (python3-yaml), so
+# guaranteed importable here; NOT a grep/sed mini-parser (org policy + fragile on flat yaml). Review F5.
+set -euo pipefail
+hostname="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["hostname"])')"
+hostnamectl set-hostname "$hostname" 2>/dev/null || printf '%s\n' "$hostname" > /etc/hostname
+echo "50-network applied (hostname=$hostname)"

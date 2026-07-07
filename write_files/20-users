@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#7
+# phase: boot
+# Runs BEFORE 30-ssh (access established before password/root auth is removed). CWD = repo root (setup.sh cd's there).
+set -euo pipefail
+user=forge-deploy
+id "$user" >/dev/null 2>&1 || useradd -m -s /bin/bash "$user"
+
+home="$(getent passwd "$user" | cut -d: -f6)"
+install -d -m 0700 -o "$user" -g "$user" "$home/.ssh"
+# deploy/ci_deploy.pub is the single source of truth; U3 renders this same key into cloud-init's {{DEPLOY_PUBKEY}} (review F4).
+key="$(cat deploy/ci_deploy.pub)"
+touch "$home/.ssh/authorized_keys"
+chmod 600 "$home/.ssh/authorized_keys"; chown "$user:$user" "$home/.ssh/authorized_keys"
+grep -qxF "$key" "$home/.ssh/authorized_keys" || printf '%s\n' "$key" >> "$home/.ssh/authorized_keys"   # dedup: no re-append on replay
+
+# NOPASSWD (key-only non-interactive deploy has no password), full scope (U4 --phase full needs arbitrary root).
+printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$user" > /etc/sudoers.d/forge-deploy
+chmod 0440 /etc/sudoers.d/forge-deploy
+visudo -cf /etc/sudoers.d/forge-deploy >/dev/null
+echo "20-users applied"
