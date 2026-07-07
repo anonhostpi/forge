@@ -8,13 +8,19 @@ set -euo pipefail
 systemctl stop apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true   # free the dpkg lock (like 60-upgrades); timers re-arm on reboot
 apt-get -o DPkg::Lock::Timeout=300 update -q
 apt-get -o DPkg::Lock::Timeout=300 install -y -q msmtp
+# noble ships the queue scripts at /usr/libexec/msmtp/msmtpq/, NOT /usr/bin — and msmtp-queue calls `msmtpq` by PATH.
+# Symlink both into /usr/bin so the sendmail wrapper AND the flush service resolve them (review F1/F2 — else every mail is LOST).
+ln -sf /usr/libexec/msmtp/msmtpq/msmtpq /usr/bin/msmtpq
+ln -sf /usr/libexec/msmtp/msmtpq/msmtp-queue /usr/bin/msmtp-queue
 
 # non-secret recipient + Bridge port from config (the U8<->U10 contract)
 operator="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["to"])')"
 port="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["bridge_smtp_port"])')"
 
-# tls off + auth off: loopback traffic never leaves the host, and the Bridge's self-signed cert wouldn't validate
-# against the system CA anyway (review F4). root:root 0600 — no `msmtp` group exists, `chown root:msmtp` would abort (F3).
+# The Bridge's loopback SMTP uses STARTTLS with a self-signed cert: keep TLS (the Bridge requires the upgrade) but
+# skip validation (tls_certcheck off) — plain `tls off` is rejected and silently black-holes the queue (review F3).
+# auth is finalized by U10 (the Bridge provides its LOCAL SMTP credential); the relay is best-effort until then.
+# root:root 0600 — no `msmtp` group exists, `chown root:msmtp` would abort the fragment (spec F3).
 cat > /etc/msmtprc <<CONF
 defaults
 logfile /var/log/msmtp.log
@@ -23,7 +29,9 @@ aliases /etc/aliases
 account bridge
 host 127.0.0.1
 port ${port}
-tls off
+tls on
+tls_starttls on
+tls_certcheck off
 auth off
 from seed@$(hostname -f 2>/dev/null || hostname)
 
