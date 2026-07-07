@@ -1,0 +1,12 @@
+name: firewall-lint
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  nft-parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -q && sudo apt-get install -y -q nftables python3-yaml
+      - run: sudo ./scripts/firewall-lint.sh

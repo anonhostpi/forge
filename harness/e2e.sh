@@ -34,8 +34,16 @@ grade_end_state() {
   assert_ok "msmtprc valid + NO host SMTP secret (U8)"           inst_exec "$VM" sh -c 'msmtp --pretend >/dev/null 2>&1 && ! grep -qiE "password|^auth +on" /etc/msmtprc'
   assert_ok "msmtpq flush timer enabled (U8)"                    inst_exec "$VM" sh -c 'systemctl is-enabled msmtpq-flush.timer | grep -qx enabled'
   assert_ok "pre-Bridge mail SPOOLS, not lost (U8)"              inst_exec "$VM" sh -c 'printf "To: root\nSubject: t\n\nx\n" | sendmail root >/dev/null 2>&1; ls /var/spool/msmtpq 2>/dev/null | grep -q .'
+  assert_ok "forge nft table present, INPUT default-drop (U9)"   inst_exec "$VM" sh -c 'nft list table inet forge 2>/dev/null | grep -q "hook input" && nft list table inet forge | grep -Eq "policy drop"'
+  assert_ok "external 6443 not in the INPUT allow-set (U9)"      inst_exec "$VM" sh -c '! nft list table inet forge | grep -Eq "dport \{[^}]*6443"'
+  # This textual assert is the SUBSTANTIVE metadata check in incus; the pod nc->169.254.169.254 negative below is
+  # vacuous off-Hetzner (nothing listens there regardless), so it needs real Hetzner or an injected listener (review F2).
+  assert_ok "FORWARD pod->metadata drop rule present (U9)"       inst_exec "$VM" sh -c 'nft list table inet forge | grep -Eq "169\.254\.169\.254 drop"'
+  assert_ok "forge firewall re-assert timer enabled (U9)"        inst_exec "$VM" sh -c 'systemctl is-enabled forge-firewall.timer | grep -qx enabled'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then
     assert_ok "k3s node Ready (U11)" inst_exec "$VM" sh -c 'kubectl get nodes | grep -qw Ready'
+    assert_ok "CoreDNS Ready — INPUT allows pod->apiserver, firewall didn't brick the cluster (U9)" \
+              inst_exec "$VM" sh -c 'kubectl -n kube-system wait --for=condition=ready pod -l k8s-app=kube-dns --timeout=90s >/dev/null 2>&1'
     # Bracket the metadata block with a raw TCP-connect probe (nc): same pinned image, same protocol depth
     # (TCP:80, no DNS / no HTTP redirect / no TLS), differ ONLY in destination IP — so a broken-egress cluster
     # fails the positive too, and only "metadata specifically dropped" passes the negative (R2/2, R3/F2, R4/F1).

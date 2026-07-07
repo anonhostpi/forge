@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#10
+# phase: boot
+# On-box firewall in a DEDICATED `table inet forge` (separate from k3s's iptables-nft tables, so a k3s reconcile never
+# flushes it). INPUT default-drop but ACCEPTS cluster-internal (lo + cni0 + pod/service CIDR) so pod->apiserver is NOT
+# bricked (review F1/F2); 6443 refused EXTERNALLY. FORWARD policy accept + a single pod->IMDS metadata drop. This file
+# manages ONLY the forge table and NEVER `flush ruleset` (which would nuke k3s's own tables — review F3).
+set -euo pipefail
+apt-get -o DPkg::Lock::Timeout=300 install -y -q nftables
+
+# Render the ruleset via the SHARED renderer (the SAME one CI nft -c's — review R2/1, so lint == what boots). The
+# template's table/delete/recreate idiom atomically replaces ONLY the forge table (k3s's tables survive). The service
+# below applies it via `enable --now` (no redundant direct apply, F6).
+bash write_files/render-firewall.sh > /etc/forge-firewall.nft
+
+# Apply on boot + re-assert every 2 min vs a k3s/kube-router reconcile (the dedicated table should survive; belt-and-suspenders).
+cat > /etc/systemd/system/forge-firewall.service <<'UNIT'
+[Unit]
+Description=Apply the forge nftables firewall (INPUT policy + metadata block)
+After=network-pre.target
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/forge-firewall.nft
+[Install]
+WantedBy=multi-user.target
+UNIT
+cat > /etc/systemd/system/forge-firewall.timer <<'UNIT'
+[Unit]
+Description=Re-assert the forge firewall vs a k3s reconcile
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=2min
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now forge-firewall.service forge-firewall.timer
+
+nft list table inet forge >/dev/null
+echo "95-firewall applied (forge nft table: INPUT drop except lo/cni0/pod/svc/allowed-ports; FORWARD metadata block; re-assert timer active)"
