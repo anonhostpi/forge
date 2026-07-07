@@ -23,5 +23,5 @@ net.bridge.bridge-nf-call-ip6tables = 1
 fs.inotify.max_user_instances = 8192
 fs.inotify.max_user_watches = 524288
 SYSCTL
-sysctl --system >/dev/null
+sysctl -e --system >/dev/null   # -e: apply every valid key; tolerate bridge keys if br_netfilter didn't load this boot (modules-load.d loads it next boot). Review F1.
 echo "10-kernel applied"

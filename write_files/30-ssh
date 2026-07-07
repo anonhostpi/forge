@@ -11,5 +11,6 @@ PasswordAuthentication no
 PubkeyAuthentication yes
 SSHD
 sshd -t                                              # validate before reload — never reload a broken config (lockout)
-systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+# No `|| true`: a failed reload would leave the OLD permissive sshd live while reporting success (review F2).
+systemctl reload-or-restart ssh 2>/dev/null || systemctl reload-or-restart sshd
 echo "30-ssh applied"

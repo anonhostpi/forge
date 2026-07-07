@@ -22,7 +22,8 @@ if wait_cloud_init "$VM" 600; then pass "cloud-init reached status=done (first i
 # unit named in HARNESS_REQUIRE FAILS in gate mode, so a staged skip cannot false-green that unit (review R2/1,3).
 grade_end_state() {
   assert_ok "sshd actually listening on :22 (U6)" inst_exec "$VM" sh -c 'ss -ltn | grep -Eq "[:.]22 "'
-  assert_ok "root SSH login disabled (U6)"          inst_exec "$VM" sh -c 'sshd -T 2>/dev/null | grep -qx "permitrootlogin no"'
+  assert_ok "root SSH login disabled in config (U6)" inst_exec "$VM" sh -c 'sshd -T 2>/dev/null | grep -qx "permitrootlogin no"'
+  assert_fails "live daemon refuses root SSH (U6)"   inst_exec "$VM" sh -c 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o PreferredAuthentications=publickey root@127.0.0.1 true'
   assert_ok "forge-deploy has NOPASSWD sudo (U6)"   inst_exec "$VM" sh -c 'sudo -l -U forge-deploy 2>/dev/null | grep -q NOPASSWD'
   assert_ok "rp_filter loose for flannel (U6)"      inst_exec "$VM" sh -c '[ "$(sysctl -n net.ipv4.conf.all.rp_filter)" = 2 ]'
   if inst_exec "$VM" test -x /usr/local/bin/kubectl 2>/dev/null; then

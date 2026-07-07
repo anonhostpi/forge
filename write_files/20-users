@@ -8,6 +8,7 @@ id "$user" >/dev/null 2>&1 || useradd -m -s /bin/bash "$user"
 
 home="$(getent passwd "$user" | cut -d: -f6)"
 install -d -m 0700 -o "$user" -g "$user" "$home/.ssh"
+# deploy/ci_deploy.pub is the single source of truth; U3 renders this same key into cloud-init's {{DEPLOY_PUBKEY}} (review F4).
 key="$(cat deploy/ci_deploy.pub)"
 touch "$home/.ssh/authorized_keys"
 chmod 600 "$home/.ssh/authorized_keys"; chown "$user:$user" "$home/.ssh/authorized_keys"
