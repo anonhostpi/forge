@@ -4,7 +4,7 @@
 set -euo pipefail
 # br_netfilter + overlay must load BEFORE the bridge-nf sysctls exist (else sysctl --system errors on a fresh box).
 printf 'br_netfilter\noverlay\n' > /etc/modules-load.d/forge.conf
-modprobe br_netfilter overlay 2>/dev/null || true
+modprobe -a br_netfilter overlay 2>/dev/null || true   # -a: load BOTH modules (without it, `overlay` is a bogus param to br_netfilter). Review R2/#3.
 cat > /etc/sysctl.d/60-forge.conf <<'SYSCTL'
 # hardening (k3s-safe: rp_filter LOOSE not strict, forwarding ON)
 net.ipv4.conf.all.rp_filter = 2
