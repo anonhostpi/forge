@@ -1,0 +1,11 @@
+name: bootstrap
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  setup-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/setup-selftest.sh
