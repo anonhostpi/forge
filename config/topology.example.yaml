@@ -1,0 +1,16 @@
+# see anonhostpi/forge#2
+# EXAMPLE shape for config/topology.sops.yaml — the real file is SOPS-encrypted (`sops -e`). This
+# .example is a plaintext template (not matched by .sops.yaml, so it may stay cleartext); values here
+# are non-sensitive placeholders. Sensitive host posture lives in the encrypted file, never here.
+ssh:
+  admin_port: 22
+  git_port: 2222
+firewall:
+  allowed_input_ports: [22, 2222, 80]
+  drop_metadata: true
+fail2ban:
+  bantime: 3600
+  findtime: 600
+  maxretry: 5
+network:
+  fqdn_scheme: replace-scheme

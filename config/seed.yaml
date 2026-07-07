@@ -1,0 +1,13 @@
+# see anonhostpi/forge#2 — NON-sensitive only; secrets live in secrets/seed.sops.yaml, topology in config/topology.sops.yaml
+hostname: seed
+k3s:
+  channel: stable                                      # pinned release channel; bump deliberately
+postgres:                                              # NON-sensitive connection coords (passwords are in secrets/)
+  host: forgejo-postgres
+  port: 5432
+  name: forgejo
+  user: forgejo
+images:
+  proton_bridge: shenxn/protonmail-bridge@sha256:0000000000000000000000000000000000000000000000000000000000000000  # pin real digest
+charts:
+  forgejo: 12.0.0                                      # project-mirrors/forgejo-helm chart version

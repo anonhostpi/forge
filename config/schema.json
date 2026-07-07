@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "see anonhostpi/forge#2 — the contract U3/U4/U6/U9/U13/U14 render against",
+  "$defs": {
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "k3s", "postgres", "images", "charts"],
+      "properties": {
+        "hostname": {"type": "string"},
+        "k3s": {"type": "object", "required": ["channel"]},
+        "postgres": {"type": "object", "required": ["host", "port", "name", "user"]},
+        "images": {"type": "object", "required": ["proton_bridge"]},
+        "charts": {"type": "object", "required": ["forgejo"]}
+      }
+    },
+    "topology": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ssh", "firewall", "fail2ban", "network"],
+      "properties": {
+        "ssh": {"type": "object", "required": ["admin_port", "git_port"]},
+        "firewall": {"type": "object", "required": ["allowed_input_ports", "drop_metadata"]},
+        "fail2ban": {"type": "object", "required": ["bantime", "findtime", "maxretry"]},
+        "network": {"type": "object", "required": ["fqdn_scheme"]}
+      }
+    },
+    "secrets": {
+      "$comment": "no additionalProperties:false — a SOPS-decrypted file retains a top-level `sops:` metadata key",
+      "type": "object",
+      "required": ["deploy_ssh", "forgejo", "postgres", "proton", "k3s"],
+      "properties": {
+        "deploy_ssh": {"type": "object", "required": ["scope", "private", "user"]},
+        "forgejo": {"type": "object", "required": ["scope", "admin_user", "admin_email", "admin_password", "secret_key", "internal_token", "ssh_host_key", "mailer_from", "mailer_password"]},
+        "postgres": {"type": "object", "required": ["scope", "app_password", "superuser_password"]},
+        "proton": {"type": "object", "required": ["scope", "username", "bridge_password"]},
+        "k3s": {"type": "object", "required": ["scope", "token"]}
+      }
+    }
+  }
+}
