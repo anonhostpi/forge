@@ -14,7 +14,7 @@ jobs:
   # Tier-2 grading gate — needs a KVM-capable (self-hosted) runner. #3 nested-KVM RISK.
   # Enabled once a KVM runner AND a deployable seed (U5/U11/U14) land.
   full-deploy-e2e:
-    if: ${{ false }}
+    if: ${{ vars.ENABLE_FULL_E2E == 'true' }}   # unset by default -> skipped; flip when the KVM runner + a deployable seed land
     runs-on: [self-hosted, kvm]
     env:
       HARNESS_GATE: "1"                            # missing prereq / all-skip / missing-required => FAIL, never green

@@ -1,0 +1,35 @@
+name: provision-lint
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  render-selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet pyyaml
+      - run: ./scripts/render-selftest.sh
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+      - run: ./actionlint
+
+  security-posture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: provision.yml must keep the epic's decisive posture
+        run: |
+          set -euo pipefail
+          f=.github/workflows/provision.yml
+          code="$(sed 's/#.*//' "$f")"                          # strip comments — a comment that NAMES the forbidden thing is fine
+          if grep -q 'toJson' <<<"$code"; then echo "FAIL: uses toJson(secrets)"; exit 1; fi
+          if grep -Eq 'pull_request_target|workflow_run' <<<"$code"; then echo "FAIL: forbidden trigger"; exit 1; fi
+          if ! grep -q 'workflow_dispatch' <<<"$code"; then echo "FAIL: not workflow_dispatch"; exit 1; fi
+          if ! grep -q 'environment:' <<<"$code"; then echo "FAIL: no environment"; exit 1; fi
+          if grep -q 'AGE_KEY' <<<"$code"; then echo "FAIL: references AGE_KEY (U4's, not U3's)"; exit 1; fi
+          echo "provision.yml security posture ok"

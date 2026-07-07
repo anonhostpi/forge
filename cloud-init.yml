@@ -18,7 +18,9 @@ runcmd:                                    # cloud-init runs this block under /b
     rm -rf "$dir"                          # replay-safe: dirty-substrate re-run must not clone into a non-empty dir
     if git clone --depth 1 "$repo" "$dir" && git -C "$dir" fetch --depth 1 origin "$ref" && git -C "$dir" checkout -q FETCH_HEAD; then
       :
-    else                                   # fallback: sha256-verified tarball (the clone path gets integrity from git)
+    else                                   # fallback: sha256-verified tarball. git clone is the reliable content-addressed
+                                           # primary; the tarball sha is best-effort (GitHub archives aren't byte-stable
+                                           # long-term) and a stale mismatch fails LOUD -> re-provision (review F-C, #24).
       command -v curl >/dev/null 2>&1 || { apt-get update -q && apt-get install -y -q curl; }
       rm -rf "$dir"; mkdir -p "$dir"; tmp="$(mktemp)"
       curl -fsSL "$turl" -o "$tmp"
