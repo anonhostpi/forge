@@ -19,13 +19,15 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/${GITHUB_REPOSITORY}/environments/production" \
-            | python3 -c 'import json,sys; e=json.load(sys.stdin); r=[x["type"] for x in e.get("protection_rules",[])]; assert "required_reviewers" in r, f"production env missing required_reviewers: {r}"; print("env protection ok:", r)'
+            | python3 -c 'import json,sys; e=json.load(sys.stdin); r=[x["type"] for x in e.get("protection_rules",[])]; assert "required_reviewers" in r, f"production env missing required_reviewers: {r}"; assert e.get("deployment_branch_policy"), "production env missing a deployment-branch policy"; print("env protection ok:", r, "branch-policy:", e["deployment_branch_policy"])'
 
-      - name: install hcloud (version-pinned + checksum-verified)   # spec F3
+      - name: install hcloud (version-pinned)          # the VERSION PIN is the real control (spec F3)
         run: |
           set -euo pipefail
           ver=1.49.1
           base="https://github.com/hetznercloud/cli/releases/download/v${ver}"
+          # NOTE (review F-B, follow-up #24): checksums.txt is same-origin as the binary — transport integrity +
+          # a tamper tripwire, not an independent anchor. Build-time tooling on the runner, not the seed.
           curl -fsSL -o hcloud.tar.gz "${base}/hcloud-linux-amd64.tar.gz"
           curl -fsSL -o checksums.txt "${base}/checksums.txt"
           grep 'hcloud-linux-amd64.tar.gz' checksums.txt | sha256sum -c -
@@ -35,6 +37,7 @@ jobs:
       - name: render cloud-init
         run: |
           set -eu                                        # no `set -x` (spec F9): don't echo values into the log
+          pip install --quiet pyyaml                     # render-cloudinit.py needs PyYAML; don't rely on it being ambient (review F-A)
           ref="${GITHUB_SHA}"                            # F6: the checked-out commit; never a workflow_dispatch input
           export REPO_URL="https://github.com/${GITHUB_REPOSITORY}.git"
           export REF="$ref"
@@ -50,6 +53,9 @@ jobs:
         run: |
           set -eu
           name=seed
-          hcloud server delete "$name" 2>/dev/null || true       # delete-if-exists then create (dirty-substrate re-run) — F5
+          # Dirty-substrate re-run recreates the seed. It is a STATELESS bootstrap box (config re-derives from the
+          # repo + U4's post-boot push; no attached volumes / irreplaceable data in scope), so destroy-then-create
+          # is safe. Delete ONLY if it exists; a real delete failure aborts (not swallowed by `|| true`). Review F-D.
+          if hcloud server describe "$name" >/dev/null 2>&1; then hcloud server delete "$name"; fi
           hcloud server create --name "$name" --type cx22 --image ubuntu-24.04 --location nbg1 \
             --user-data-from-file user-data.yml
