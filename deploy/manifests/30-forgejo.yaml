@@ -56,7 +56,10 @@ spec:
         server:
           SSH_PORT: 2222
           SSH_LISTEN_PORT: 2222
-      additionalConfigFromEnvs:   # toYaml'd straight into container env: -> secretKeyRef works (review F3)
+      # These envs are injected into the chart's `init-app-ini` container, which writes /data/gitea/conf/app.ini; the
+      # `configure-gitea` (migrations) and main containers then read that app.ini off the shared /data volume — so the
+      # secrets DO reach migrations, without ever appearing as a plaintext Helm value (review F3, R1 verification).
+      additionalConfigFromEnvs:
         - name: GITEA__database__PASSWD
           valueFrom:
             secretKeyRef:

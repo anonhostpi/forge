@@ -75,8 +75,11 @@ grade_end_state() {
     assert_ok "git-SSH answers on :2222 (U14)" \
               inst_exec "$VM" sh -c 'ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | grep -q ssh-'
     # A rotating host key is indistinguishable from a MITM to every git client — the /data PVC must keep it stable.
+    # `rollout restart` + `rollout status` tracks the NEW ReplicaSet. (delete-pod then `wait -l` would return
+    # "no matching resources found" INSTANTLY if the replacement isn't created yet, then a fixed sleep could leave the
+    # key unread -> a spurious FAILURE. A test that can false-fail is a test-quality defect. Review R1/1.)
     assert_ok "git-SSH host key STABLE across a pod restart (U14)" \
-              inst_exec "$VM" sh -c 'k1=$(ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | sort); [ -n "$k1" ] || exit 1; kubectl -n forge delete pod -l app.kubernetes.io/name=forgejo >/dev/null 2>&1; kubectl -n forge wait --for=condition=ready pod -l app.kubernetes.io/name=forgejo --timeout=300s >/dev/null 2>&1; sleep 5; k2=$(ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | sort); [ "$k1" = "$k2" ]'
+              inst_exec "$VM" sh -c 'k1=$(ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | sort); [ -n "$k1" ] || exit 1; kubectl -n forge rollout restart deployment/forgejo >/dev/null 2>&1 || exit 1; kubectl -n forge rollout status deployment/forgejo --timeout=300s >/dev/null 2>&1 || exit 1; k2=$(ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | sort); [ -n "$k2" ] && [ "$k1" = "$k2" ]'
   else skip "kubectl absent (U11 pending) — k3s / firewall / metadata / postgres / forgejo asserts deferred"; fi
   skip "CI->seed:22 SSH-push deploy exercised end-to-end (U4 pending)"
   skip "user-data secret scrub-on-boot asserted (U3/U4 pending)"
