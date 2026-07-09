@@ -33,8 +33,17 @@ grade_end_state() {
   assert_ok "sendmail resolves to the msmtpq queue wrapper (U8)" inst_exec "$VM" sh -c 'readlink -f "$(command -v sendmail)" | grep -q forge-sendmail'
   # U10 amended this: local bridge auth is now expected. The invariant is "no Proton ACCOUNT credential on the host" —
   # the Bridge's own generated password lives in a 0600 root file read via passwordeval, never inline in msmtprc (F4).
-  assert_ok "msmtprc valid; bridge auth via passwordeval, NO cleartext password inline (U8)" \
-            inst_exec "$VM" sh -c 'msmtp --pretend >/dev/null 2>&1 && grep -q "^passwordeval " /etc/msmtprc && ! grep -qE "^password[[:space:]]" /etc/msmtprc'
+  assert_ok "msmtprc: bridge auth via passwordeval, no inline cleartext password (U8)" \
+            inst_exec "$VM" sh -c 'grep -q "^passwordeval " /etc/msmtprc && ! grep -qE "^password[[:space:]]" /etc/msmtprc'
+  # The Bridge rejects a MAIL FROM the authenticated account does not own, and msmtp's `auto_from off` makes this the
+  # envelope sender — so a `from` that differs from `user` silently breaks every send after login (review F1).
+  assert_ok "msmtprc sender equals the authenticated Proton address (U10)" \
+            inst_exec "$VM" sh -c '[ "$(awk "/^from /{print \$2}" /etc/msmtprc)" = "$(awk "/^user /{print \$2}" /etc/msmtprc)" ]'
+  # `msmtp --pretend` may evaluate passwordeval (unverified); before the operator's init the passfile is absent, so
+  # running it then could fail spuriously. Exercise it only once the credential exists (review F3).
+  if inst_exec "$VM" test -f /etc/msmtp-bridge.pass 2>/dev/null; then
+    assert_ok "msmtp config parses with the bridge credential present" inst_exec "$VM" sh -c 'msmtp --pretend >/dev/null 2>&1'
+  else skip "msmtp --pretend deferred: the bridge passfile does not exist until the operator's interactive init"; fi
   assert_ok "bridge quadlet installed, owned by the non-root forge-bridge user (U10)" \
             inst_exec "$VM" sh -c 'f=/home/forge-bridge/.config/containers/systemd/bridge.container; [ -f "$f" ] && [ "$(stat -c %U "$f")" = forge-bridge ]'
   assert_ok "forge-bridge linger enabled — a nologin user cannot run systemctl --user without it (U10)" \

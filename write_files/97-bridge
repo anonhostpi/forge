@@ -38,7 +38,12 @@ PublishPort=127.0.0.1:${port}:25
 PublishPort=127.0.0.1:1143:143
 
 [Service]
-Restart=always
+# Not Restart=always: before the operator's interactive init the Bridge has no account, so an always-restart would
+# spin and spam the journal indefinitely. on-failure + a start limit lets it settle until init (review F5).
+Restart=on-failure
+RestartSec=30
+StartLimitBurst=5
+StartLimitIntervalSec=600
 
 [Install]
 WantedBy=default.target
@@ -47,6 +52,10 @@ chown "$user:$user" "$home/.config/containers/systemd/bridge.container"
 
 # nologin: never a login shell. Drive the user manager with an explicit environment (review F1).
 as_bridge() { sudo -u "$user" env XDG_RUNTIME_DIR="/run/user/${uid}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" "$@"; }
+# `loginctl enable-linger` starts user@UID.service ASYNCHRONOUSLY, so the bus socket may not exist yet during cloud-init.
+# Wait briefly (review F4). If it never appears the quadlet generator still runs when the user manager starts at boot,
+# so the unit is generated either way — this only makes the immediate daemon-reload/start meaningful.
+for _ in $(seq 1 30); do [ -S "/run/user/${uid}/bus" ] && break; sleep 1; done
 as_bridge systemctl --user daemon-reload 2>/dev/null || true
 # Until the operator's interactive init populates the volume the Bridge cannot serve, so a start failure here is
 # EXPECTED and must not fail the boot. U8's msmtpq queue then HOLDS the mail rather than losing it — its whole purpose.

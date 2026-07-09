@@ -32,6 +32,15 @@ fi
 # password — and it is read via `passwordeval` from a 0600 root file the operator writes at the one-time interactive
 # init, so no cleartext secret sits in /etc/msmtprc. Until that file exists msmtp fails to send and msmtpq QUEUES the
 # mail rather than losing it — exactly what U8's queue is for. root:root 0600 (there is no `msmtp` group).
+#
+# `from` MUST be the authenticated Proton address: the Bridge rejects a MAIL FROM the logged-in account does not own,
+# and msmtp defaults to `auto_from off` so this value IS the envelope sender. The old `from seed@$(hostname)` would
+# have been rejected on every send — silently, since CI has no live login (review F1). `set_from_header on` keeps a
+# system mailer's `root@seed` header from re-introducing the mismatch.
+#
+# UNVERIFIED (review F2): that msmtp performs cleartext LOGIN over `tls off` on this build. It is the documented
+# msmtp+Bridge pattern and fails SAFE (msmtpq queues, never loses), but it is not proven here — if the first real send
+# errors on auth, flip `mail.bridge_starttls` and re-run. Do not treat this comment as verification.
 cat > /etc/msmtprc <<CONF
 defaults
 logfile /var/log/msmtp.log
@@ -44,7 +53,8 @@ ${tls_block}
 auth login
 user ${bridge_user}
 passwordeval "cat /etc/msmtp-bridge.pass"
-from seed@$(hostname -f 2>/dev/null || hostname)
+from ${bridge_user}
+set_from_header on
 
 account default : bridge
 CONF
