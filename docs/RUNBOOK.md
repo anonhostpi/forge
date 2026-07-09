@@ -25,16 +25,22 @@ assert this and fail closed if it is absent.
 2. Generate the CI deploy SSH keypair. Commit the **public** key to `deploy/ci_deploy.pub`; put the **private** key in
    `secrets/seed.sops.yaml` under `deploy_ssh.private`.
 3. Fill `config/seed.yaml` — at minimum `mail.to` and `mail.bridge_user` (see [CONFIG.md](CONFIG.md)).
-4. Fill `secrets/seed.example.yaml`, then encrypt it:
+4. Fill in the values, then encrypt. **sops picks recipients by matching its *input* path against `.sops.yaml`
+   `creation_rules` — a shell redirect is invisible to it.** The rules match `*.sops.yaml`, and the templates are
+   `*.example.yaml`, so `sops -e template > out.sops.yaml` fails with *no matching creation rules found*. Copy to the
+   final name first, then encrypt in place:
    ```sh
-   sops -e secrets/seed.example.yaml > secrets/seed.sops.yaml
+   cp secrets/seed.example.yaml secrets/seed.sops.yaml
+   sops -e -i secrets/seed.sops.yaml
+
+   cp deploy/manifests/postgres-secret.example.yaml deploy/manifests/postgres.sops.yaml
+   cp deploy/manifests/forgejo-secret.example.yaml  deploy/manifests/forgejo.sops.yaml
+   sops -e -i deploy/manifests/postgres.sops.yaml
+   sops -e -i deploy/manifests/forgejo.sops.yaml
    ```
-5. Encrypt the k8s creds Secrets the same way:
-   ```sh
-   sops -e deploy/manifests/postgres-secret.example.yaml > deploy/manifests/postgres.sops.yaml
-   sops -e deploy/manifests/forgejo-secret.example.yaml  > deploy/manifests/forgejo.sops.yaml
-   ```
-   `.sops.yaml` already carries creation rules for `secrets/**` and `deploy/manifests/*.sops.yaml`.
+   (`sops --filename-override <final-name> -e <template>` works too.) `.sops.yaml` carries rules for
+   `secrets/*.sops.yaml`, `secrets/*.{key,pem,env,json}`, `config/topology.sops.yaml`, and
+   `deploy/manifests/*.sops.yaml` — **not** for `secrets/**` generally.
 
 `config-lint` will fail the build if a placeholder recipient or a cleartext secret survives.
 
@@ -69,10 +75,16 @@ self-heals; no restart is needed.
 Over an SSH TTY as an admin (`forge-bridge` has `nologin`, so `su -` will not work):
 
 ```sh
-sudo -u forge-bridge env XDG_RUNTIME_DIR=/run/user/$(id -u forge-bridge) \
-  podman run -it --rm -v forge-bridge:/root \
-  shenxn/protonmail-bridge:3.19.0-1 init
+BRIDGE_UID=$(id -u forge-bridge)
+BRIDGE_IMG=$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["images"]["proton_bridge"])')
+
+sudo -u forge-bridge env XDG_RUNTIME_DIR=/run/user/$BRIDGE_UID \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$BRIDGE_UID/bus \
+  podman run -it --rm -v forge-bridge:/root "$BRIDGE_IMG" init
 ```
+
+Read the image from `seed.yaml` rather than typing a tag — the pin includes a **digest**, and a tag-only pull silently
+unpins it.
 
 Log in. The Bridge writes its credentials into the `forge-bridge` volume and prints a **locally generated** SMTP
 password (this is *not* your Proton account password). Give it to msmtp:
@@ -80,8 +92,14 @@ password (this is *not* your Proton account password). Give it to msmtp:
 ```sh
 printf '%s' '<bridge-generated-password>' | sudo tee /etc/msmtp-bridge.pass >/dev/null
 sudo chmod 600 /etc/msmtp-bridge.pass && sudo chown root:root /etc/msmtp-bridge.pass
-sudo -u forge-bridge env XDG_RUNTIME_DIR=/run/user/$(id -u forge-bridge) systemctl --user start bridge.service
+
+sudo -u forge-bridge env XDG_RUNTIME_DIR=/run/user/$BRIDGE_UID \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$BRIDGE_UID/bus \
+  systemctl --user start bridge.service
 ```
+
+Both environment variables are required: `forge-bridge` has `nologin`, so there is no login session to supply them, and
+`systemctl --user` fails to reach the bus without `DBUS_SESSION_BUS_ADDRESS`.
 
 Until this file exists, host mail (unattended-upgrades, fail2ban) **queues** in `/var/spool/msmtpq` rather than being
 lost. A flush timer drains it once the Bridge answers.

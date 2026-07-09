@@ -8,21 +8,28 @@ Where a value's *mechanism* matters, the authoritative explanation is the inline
 The box **cannot decrypt SOPS** (the age key stays in CI), so anything a fragment needs at boot must live here in
 cleartext. Nothing secret belongs in this file; `config-lint` enforces its shape against `config/schema.json`.
 
-| Key | Purpose | Read by |
+**Read vs mirrored.** Only the fragments load this file at boot. The k8s manifests are applied as plaintext with **no
+render step**, so a few keys are *duplicated by hand* into a manifest rather than read from here. Those rows say
+**mirrored**: editing `seed.yaml` alone will **not** change the cluster — you must edit the manifest too.
+
+| Key | Purpose | Consumer |
 |---|---|---|
-| `hostname` | the box's hostname | `write_files/50-network` |
-| `k3s.version` | **the** pin. Reproducible installs; a moving channel would silently upgrade the cluster on re-provision | `write_files/99-k3s` |
+| `hostname` | the box's hostname | **read by** `write_files/50-network` |
+| `k3s.version` | **the** pin. Reproducible installs; a moving channel would silently upgrade the cluster on re-provision | **read by** `write_files/99-k3s` |
 | `k3s.channel` | documented fallback only — `version` is what installs | — |
-| `postgres.{host,port,name,user}` | connection coordinates Forgejo is configured with (passwords are *not* here) | `deploy/manifests/30-forgejo.yaml` |
-| `images.proton_bridge` | Bridge image, pinned by **tag + digest** | `write_files/97-bridge` |
-| `charts.forgejo` | Forgejo Helm chart version | `deploy/manifests/30-forgejo.yaml` |
-| `mail.to` | operator recipient for host mail. **Set a real deliverable address.** | `write_files/55-msmtp` |
-| `mail.bridge_smtp_port` | the loopback port the Bridge publishes and msmtp relays to | `55-msmtp`, `97-bridge` |
-| `mail.bridge_user` | the Proton address msmtp authenticates as, and the envelope sender. An address, not a secret. | `write_files/55-msmtp` |
-| `mail.bridge_starttls` | the Bridge's loopback TLS mode is **version-dependent**; see the comment beside it | `write_files/55-msmtp` |
-| `firewall.allowed_input_ports` | the only ports admitted from the internet | `write_files/render-firewall.sh` |
-| `firewall.{pod_cidr,service_cidr}` | cluster-internal sources the host firewall must accept, or pods cannot reach the apiserver | `write_files/render-firewall.sh` |
-| `firewall.drop_metadata` | toggles the host-layer IMDS drop | `write_files/render-firewall.sh` |
+| `postgres.{host,port,name,user}` | connection coordinates Forgejo is configured with (passwords are *not* here) | **mirrored** in `deploy/manifests/30-forgejo.yaml` (hardcoded; keep in sync) |
+| `images.proton_bridge` | Bridge image, pinned by **tag + digest** | **read by** `write_files/97-bridge` |
+| `charts.forgejo` | Forgejo Helm chart version | **mirrored** in `deploy/manifests/30-forgejo.yaml` (hardcoded; keep in sync) |
+| `mail.to` | operator recipient for host mail. **Set a real deliverable address.** | **read by** `write_files/55-msmtp` |
+| `mail.bridge_smtp_port` | the loopback port the Bridge publishes and msmtp relays to | **read by** `55-msmtp`, `97-bridge` |
+| `mail.bridge_user` | the Proton address msmtp authenticates as, and the envelope sender. An address, not a secret. | **read by** `write_files/55-msmtp` |
+| `mail.bridge_starttls` | the Bridge's loopback TLS mode is **version-dependent**; see the comment beside it | **read by** `write_files/55-msmtp` |
+| `firewall.allowed_input_ports` | the only ports admitted from the internet | **read by** `write_files/render-firewall.sh` |
+| `firewall.{pod_cidr,service_cidr}` | cluster-internal sources the host firewall must accept, or pods cannot reach the apiserver | **read by** `write_files/render-firewall.sh` |
+| `firewall.drop_metadata` | toggles the host-layer IMDS drop | **read by** `write_files/render-firewall.sh` |
+
+The complete set of `seed.yaml` readers is `50-network`, `55-msmtp`, `97-bridge`, `99-k3s`, and `render-firewall.sh`.
+Nothing else loads it.
 
 ## `secrets/` — SOPS-encrypted
 
