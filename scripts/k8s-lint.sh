@@ -8,7 +8,7 @@ shopt -s nullglob
 fail=0
 for f in deploy/manifests/*.yaml; do
   case "$f" in *.sops.yaml | *.example.yaml) continue ;; esac
-  if grep -Eq '^kind:[[:space:]]*Secret' "$f"; then
+  if grep -Eq "^kind:[[:space:]]*[\"']?Secret" "$f"; then   # tolerate a quoted scalar: kind: \"Secret\" (review F#4)
     echo "FAIL: $f is a plaintext kind:Secret — secrets must be SOPS-encrypted (*.sops.yaml), not plaintext (F3)"; fail=1
   fi
   kubeconform -strict -summary -kubernetes-version 1.31.0 "$f" || fail=1

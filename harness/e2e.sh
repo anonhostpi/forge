@@ -56,9 +56,12 @@ grade_end_state() {
     # row written on the clean deploy must survive the DIRTY-substrate reboot via the local-path PVC (review F2).
     assert_ok "Postgres pod Ready (U13)" \
               inst_exec "$VM" sh -c 'kubectl -n forge wait --for=condition=ready pod -l app=forgejo-postgres --timeout=120s >/dev/null 2>&1'
-    inst_exec "$VM" sh -c "kubectl -n forge exec statefulset/forgejo-postgres -- psql -U forgejo -c \"CREATE TABLE IF NOT EXISTS forge_persist(id int PRIMARY KEY); INSERT INTO forge_persist VALUES(1) ON CONFLICT DO NOTHING;\"" >/dev/null 2>&1 || true
-    assert_ok "Postgres data persists across dirty reboot — sentinel row survives (U13)" \
-              inst_exec "$VM" sh -c "kubectl -n forge exec statefulset/forgejo-postgres -- psql -U forgejo -tAc 'SELECT count(*) FROM forge_persist' | grep -q 1"
+    # Write the sentinel ONCE, guarded by a VM-side marker that survives the reboot. On the post-replay re-grade this is
+    # a NO-OP, so the assert below READS ONLY — a wiped PVC (postgres re-initdb's, table gone) then FAILS it. The prior
+    # form re-inserted the row immediately before reading it: a tautology that proved nothing (review F#3).
+    inst_exec "$VM" sh -c 'test -f /var/lib/forge-e2e-persist || { kubectl -n forge exec statefulset/forgejo-postgres -- psql -U forgejo -c "CREATE TABLE forge_persist(tok text); INSERT INTO forge_persist VALUES('"'"'forge-sentinel'"'"');" && touch /var/lib/forge-e2e-persist; }' >/dev/null 2>&1 || true
+    assert_ok "Postgres data persists across dirty reboot — original sentinel survives, read-only re-grade (U13)" \
+              inst_exec "$VM" sh -c "kubectl -n forge exec statefulset/forgejo-postgres -- psql -U forgejo -tAc 'SELECT tok FROM forge_persist' | grep -qx forge-sentinel"
     assert_ok "Postgres backup CronJob present (U13)" \
               inst_exec "$VM" sh -c 'kubectl -n forge get cronjob forgejo-postgres-backup >/dev/null 2>&1'
   else skip "kubectl absent (U11 pending) — k3s / firewall / metadata / postgres asserts deferred"; fi

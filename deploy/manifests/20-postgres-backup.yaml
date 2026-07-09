@@ -43,8 +43,12 @@ spec:
                       name: forgejo-postgres
                       key: app_password
               command: ["/bin/sh", "-c"]
+              # dash has NO pipefail, so `pg_dump | gzip` takes gzip's exit: a FAILED dump would yield a valid gzip of
+              # nothing (silent empty backup) and the retention below would then rotate away the last GOOD dumps —
+              # data loss discovered only at restore (review F#2). So: dump to a temp file (set -e catches pg_dump's
+              # exit directly), assert it is non-empty, THEN gzip, and prune ONLY after a verified dump.
               args:
-                - 'set -eu; out="/backup/forgejo-$(date +%F-%H%M).sql.gz"; pg_dump -h forgejo-postgres -U forgejo forgejo | gzip > "$out"; echo "dumped $out"; ls -1t /backup/*.sql.gz | tail -n +15 | xargs -r rm -f'
+                - 'set -eu; tmp="/backup/.dump.$$"; out="/backup/forgejo-$(date +%F-%H%M).sql.gz"; pg_dump -h forgejo-postgres -U forgejo forgejo > "$tmp"; [ -s "$tmp" ]; gzip -c "$tmp" > "$out"; rm -f "$tmp"; echo "dumped $out"; ls -1t /backup/*.sql.gz | tail -n +15 | xargs -r rm -f'
               volumeMounts:
                 - name: backup
                   mountPath: /backup

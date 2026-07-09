@@ -30,9 +30,11 @@ trap 'ssh-agent -k >/dev/null 2>&1 || true' EXIT
 "$SOPS_CMD" -d --extract '["deploy_ssh"]["private"]' "$SECRETS_FILE" | ssh-add - 2>/dev/null
 
 # The manifest stream = ONLY in-repo content (plaintext workloads + SOPS-decrypted secrets), ZERO workflow-context
-# interpolation — root kubectl can't become RCE (F8, restated for the plaintext path). Plaintext FIRST (Namespace +
-# workloads), then secrets: the StatefulSet pod CreateContainerConfigError-retries until its Secret in the same batch
-# lands — self-heals, no restart (U13 F3).
+# interpolation — root kubectl can't become RCE (F8, restated for the plaintext path). `kubectl apply -f -` streams
+# documents IN ORDER and does NOT kind-reorder, so plaintext files apply in NN-prefix (glob-sorted) order — an EXPLICIT
+# contract: `00-namespace.yaml` first, then workloads (review F#1: a namespaced object applied before its Namespace
+# errors and aborts the whole deploy; alphabetical filenames are NOT an ordering contract). Secrets stream LAST: the
+# StatefulSet pod CreateContainerConfigError-retries until its Secret in the same batch lands — self-heals (U13 F3).
 stream() {
   local f
   for f in "${plain[@]}"; do cat "$f"; echo "---"; done

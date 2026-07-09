@@ -8,3 +8,16 @@ dir as a misconfiguration (fails) but an **existing-but-empty** dir as intention
 
 Never place `scope: ci-only` material here (e.g. the deploy SSH key) — that is CI's own credential and must never
 land in an in-cluster Secret.
+
+## Ordering contract (forge#14)
+
+`kubectl apply -f -` streams documents **in order** and does **not** kind-reorder. So plaintext manifests apply in
+**NN-prefix (glob-sorted) order** — an explicit contract, not an alphabetical accident:
+
+- `00-namespace.yaml` — the `forge` Namespace, **always first** (a namespaced object applied before its Namespace
+  errors and aborts the whole deploy).
+- `10-*`, `20-*` … — workloads, in dependency order.
+- `*.sops.yaml` — SOPS-encrypted Secrets, streamed **last** (a pod referencing a Secret retries until it lands).
+- `*.example.yaml` — templates; excluded from the deploy stream and from k8s-lint.
+
+**Never** put a `kind: Secret` in a plaintext `*.yaml` — `scripts/k8s-lint.sh` fails the build.

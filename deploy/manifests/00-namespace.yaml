@@ -1,0 +1,8 @@
+# see anonhostpi/forge#14 — the `forge` Namespace MUST apply before any namespaced object. `kubectl apply -f -` streams
+# documents in order and does NOT kind-reorder, so ordering is by the NN filename prefix (glob-sorted) — an EXPLICIT
+# contract, not an alphabetical accident (review F#1: `postgres-backup.yaml` sorted before `postgres.yaml` and the
+# PVC/CronJob hit `namespaces "forge" not found`, aborting the whole deploy).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forge

@@ -1,11 +1,7 @@
-# see anonhostpi/forge#14 — NON-secret Postgres workload (StatefulSet + Service). Applied by U4's deploy.sh (plaintext
-# path). The creds Secret rides deploy/manifests/postgres.sops.yaml (operator sops-encrypts postgres-secret.example.yaml).
+# see anonhostpi/forge#14 — NON-secret Postgres workload (Service + StatefulSet). Applied by U4's deploy.sh (plaintext
+# path), AFTER 00-namespace.yaml (NN-prefix ordering contract). The creds Secret rides deploy/manifests/*.sops.yaml
+# (operator sops-encrypts postgres-secret.example.yaml).
 # POSTGRES_USER/DB are hardcoded to match seed.yaml postgres.{user,name} (the plaintext path has no render step — review F7).
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: forge
----
 apiVersion: v1
 kind: Service
 metadata:
