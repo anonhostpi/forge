@@ -63,6 +63,11 @@ grade_end_state() {
     # is enforced and that the additive union with the permissive baseline did NOT materialise (review F1).
     assert_fails "forgejo-labelled pod CANNOT reach an arbitrary external IP — U14's strict egress survives the additive baseline (U12)" \
                  inst_exec "$VM" sh -c "kubectl -n forge run u12np --rm -i --restart=Never --labels app.kubernetes.io/name=forgejo --image=$IMG -- sh -c 'nc -w5 1.1.1.1 80 </dev/null'"
+    # The whole exclusion hinges on the chart labelling its pods. A future chart bump emitting an unlabelled
+    # Forgejo pod would silently re-open the additive-union hazard AND invalidate the synthetic probe above, together
+    # and invisibly. Guard the invariant at its source: the real Deployment's pod template must carry the label (R1/L3).
+    assert_ok "the real Forgejo pod template carries the label the baseline exclusion depends on (U12)" \
+              inst_exec "$VM" sh -c "[ \"\$(kubectl -n forge get deployment forgejo -o jsonpath='{.spec.template.metadata.labels.app\.kubernetes\.io/name}' 2>/dev/null)\" = forgejo ]"
     # U13 Postgres — requires the deploy flow (U4 SSH-push of the workload + Secret) to have run. Persistence: a sentinel
     # row written on the clean deploy must survive the DIRTY-substrate reboot via the local-path PVC (review F2).
     assert_ok "Postgres pod Ready (U13)" \
