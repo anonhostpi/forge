@@ -112,6 +112,9 @@ fragment — the Bridge's loopback TLS mode is version-dependent
 
 ## 4. Verify
 
+Run these **on the box**, in the same SSH session as §3. (`curl`/`ssh-keyscan` against the public IP from the box is
+deliberate — it exercises the full ingress path, firewall included, rather than a loopback shortcut.)
+
 ```sh
 sudo k3s kubectl -n forge get pods                     # postgres + forgejo Running
 curl -s -o /dev/null -w '%{http_code}\n' http://<seed-ip>/     # 200
