@@ -9,12 +9,17 @@ postgres:                                              # NON-sensitive connectio
   name: forgejo
   user: forgejo
 images:
-  proton_bridge: shenxn/protonmail-bridge@sha256:0000000000000000000000000000000000000000000000000000000000000000  # pin real digest
+  # forge#11 — tag 3.19.0-1 is the VERSIONED, official-.deb variant (not the moving `latest`, not the from-source `-build`).
+  proton_bridge: shenxn/protonmail-bridge:3.19.0-1@sha256:3717b4441130675dc9131196de9f9c5287d2ea21b138d83b0486429e1737638a
 charts:
   forgejo: 12.0.0                                      # project-mirrors/forgejo-helm chart version
 mail:                                                  # forge#9 — host critical-mail (u-u / fail2ban) via msmtp
   to: root@localhost                                   # operator recipient; set a real deliverable address
   bridge_smtp_port: 1025                               # U8<->U10 contract: msmtp relays to the Proton Bridge on 127.0.0.1:<this>
+  bridge_user: replace-with-proton-address             # forge#11 — the Proton address msmtp authenticates as (an address, not a secret)
+  bridge_starttls: false                               # forge#11 — the Bridge's LOOPBACK TLS mode is VERSION-DEPENDENT. 3.19.0-1's
+                                                       # listener is plaintext; flip to true only after verifying your pinned image
+                                                       # actually offers STARTTLS on this port (review F2 — do not guess).
 firewall:                                              # forge#10 — NON-secret host firewall knobs (the box can't decrypt SOPS at boot)
   allowed_input_ports: [22, 2222, 80]                  # sshd / git-SSH (Klipper) / HTTP (Klipper)
   pod_cidr: 10.42.0.0/16                               # k3s default pod CIDR

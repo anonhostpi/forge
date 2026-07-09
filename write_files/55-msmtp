@@ -13,14 +13,25 @@ apt-get -o DPkg::Lock::Timeout=300 install -y -q msmtp
 ln -sf /usr/libexec/msmtp/msmtpq/msmtpq /usr/bin/msmtpq
 ln -sf /usr/libexec/msmtp/msmtpq/msmtp-queue /usr/bin/msmtp-queue
 
-# non-secret recipient + Bridge port from config (the U8<->U10 contract)
+# non-secret recipient + Bridge coords from config (the U8<->U10 contract)
 operator="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["to"])')"
 port="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["bridge_smtp_port"])')"
+bridge_user="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["bridge_user"])')"
+starttls="$(python3 -c 'import yaml; print(str(yaml.safe_load(open("config/seed.yaml"))["mail"]["bridge_starttls"]).lower())')"
 
-# The Bridge's loopback SMTP uses STARTTLS with a self-signed cert: keep TLS (the Bridge requires the upgrade) but
-# skip validation (tls_certcheck off) — plain `tls off` is rejected and silently black-holes the queue (review F3).
-# auth is finalized by U10 (the Bridge provides its LOCAL SMTP credential); the relay is best-effort until then.
-# root:root 0600 — no `msmtp` group exists, `chown root:msmtp` would abort the fragment (spec F3).
+# The Bridge's LOOPBACK TLS mode is VERSION-DEPENDENT — 3.19.0-1 listens plaintext, other builds offer STARTTLS. Driven
+# by the seed.yaml knob, never guessed (forge#11 review F2; the earlier hardcoded `tls on` was asserted, not verified).
+if [ "$starttls" = true ]; then
+  tls_block=$'tls on\ntls_starttls on\ntls_certcheck off'
+else
+  tls_block=$'tls off'
+fi
+
+# `auth on` alone is insufficient: msmtp's auto-negotiate errors "cannot use a secure authentication method" against the
+# Bridge, so pin `auth login`. The password is the Bridge's LOCAL, self-generated credential — never the Proton ACCOUNT
+# password — and it is read via `passwordeval` from a 0600 root file the operator writes at the one-time interactive
+# init, so no cleartext secret sits in /etc/msmtprc. Until that file exists msmtp fails to send and msmtpq QUEUES the
+# mail rather than losing it — exactly what U8's queue is for. root:root 0600 (there is no `msmtp` group).
 cat > /etc/msmtprc <<CONF
 defaults
 logfile /var/log/msmtp.log
@@ -29,10 +40,10 @@ aliases /etc/aliases
 account bridge
 host 127.0.0.1
 port ${port}
-tls on
-tls_starttls on
-tls_certcheck off
-auth off
+${tls_block}
+auth login
+user ${bridge_user}
+passwordeval "cat /etc/msmtp-bridge.pass"
 from seed@$(hostname -f 2>/dev/null || hostname)
 
 account default : bridge
