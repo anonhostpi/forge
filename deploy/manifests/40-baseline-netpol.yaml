@@ -1,0 +1,43 @@
+# see anonhostpi/forge#13 — the k8s half of the dual metadata defense (U9's host nft FORWARD DROP is the other half).
+#
+# NetworkPolicy is ADDITIVE: a pod is allowed traffic if ANY policy selecting it allows it. So this permissive baseline
+# MUST NOT select Forgejo — its union with U14's deliberately strict egress policy would silently hand Forgejo broad
+# egress. `NotIn` selects pods whose label differs OR is ABSENT, so Forgejo (labelled) is excluded while Postgres, the
+# backup CronJob, and any unlabelled Job are covered.
+#
+# Stated residuals: this policy is namespace-scoped to `forge` (blanketing kube-system would break system pods), so
+# kube-system workloads are protected by U9 ALONE; and hostNetwork pods (klipper svclb) bypass BOTH layers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: baseline-egress
+  namespace: forge
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: NotIn
+        values: [forgejo]
+  policyTypes: [Egress]      # Egress only — ingress stays default-allow, so Forgejo -> Postgres survives
+  egress:
+    # kube-router implements ipBlock.except (evalIPBlockPeer adds each `except` CIDR to the ipset with OptionNoMatch;
+    # longest-prefix nomatch beats the 0.0.0.0/0 match), so this is a REAL k8s-layer drop of the Hetzner IMDS.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.169.254/32
+    # Belt-and-suspenders + self-documenting. kube-router evaluates egress post-DNAT, so CoreDNS's POD ip (inside the
+    # pod CIDR, hence inside 0.0.0.0/0) is already permitted above; this states the intent explicitly.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
