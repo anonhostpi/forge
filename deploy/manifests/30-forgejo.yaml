@@ -27,6 +27,13 @@ spec:
       enabled: false
     redis:
       enabled: false
+    # The chart defaults to RollingUpdate with maxSurge 100% / maxUnavailable 0 — i.e. SURGE-FIRST. With one replica on
+    # an RWO PVC and a leveldb queue on /data, the new pod would have to start while the OLD pod still holds the
+    # goleveldb LOCK, so it never goes Ready and the rollout hangs. Recreate terminates the old pod first (review R2/1).
+    # `rollingUpdate: null` deletes the inherited default — the API rejects Recreate together with a rollingUpdate block.
+    strategy:
+      type: Recreate
+      rollingUpdate: null
     persistence:
       enabled: true               # /data PVC: git-SSH host keys live here, so they are STABLE across pod restarts (review F5)
       storageClass: local-path
