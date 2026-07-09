@@ -33,12 +33,14 @@ EOF
 chmod +x "$bin"/*
 
 fdir="$tmp/manifests"; mkdir -p "$fdir"; echo dummy > "$fdir/forgejo.sops.yaml"
+printf 'apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: forge-plain\n' > "$fdir/workload.yaml"   # U13: a plaintext non-secret workload
 
 PATH="$bin:$PATH" AGE_KEY=fixture SEED_IP=203.0.113.5 \
   MANIFEST_DIR="$fdir" SECRETS_FILE="$tmp/secrets.sops.yaml" \
   bash scripts/deploy.sh >/dev/null 2>&1
 
-grep -q 'kind: Secret' "$sshin" 2>/dev/null && echo "PASS: decrypted manifest piped to ssh stdin" || { echo "FAIL: manifest not on ssh stdin"; rc=1; }
+grep -q 'kind: Secret' "$sshin" 2>/dev/null && echo "PASS: decrypted secret piped to ssh stdin" || { echo "FAIL: secret not on ssh stdin"; rc=1; }
+grep -q 'kind: ConfigMap' "$sshin" 2>/dev/null && echo "PASS: plaintext workload piped to ssh stdin (U13 dual-glob)" || { echo "FAIL: plaintext workload not on ssh stdin"; rc=1; }
 grep -q 'sudo k3s kubectl apply -f -' "$sshlog" 2>/dev/null && echo "PASS: remote cmd is sudo k3s kubectl apply -f -" || { echo "FAIL: wrong remote cmd"; rc=1; }
 grep -q 'forge-deploy@203.0.113.5' "$sshlog" 2>/dev/null && echo "PASS: targets forge-deploy@seed" || { echo "FAIL: wrong ssh target"; rc=1; }
 grep -q 'accept-new' "$sshlog" 2>/dev/null && echo "PASS: host-key accept-new (window tracked #25)" || { echo "FAIL: no accept-new"; rc=1; }
