@@ -1,0 +1,45 @@
+# see anonhostpi/forge#15 — Forgejo-specific NetworkPolicy. DISTINCT from U12's baseline allow-except-metadata policy.
+# Enforced by k3s's bundled kube-router netpol (default-on).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forgejo
+  namespace: forge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Klipper ServiceLB SNATs, so the pod sees the NODE ip, not the client. Ingress must therefore be PORT-ONLY with an
+    # unrestricted source — a source-restricted rule would drop every LB-forwarded request. Real client IP is lost, so
+    # no app-level per-source banning is possible here (accepted; the host-level fail2ban in U7 covers sshd:22). Review F6.
+    - ports:
+        - protocol: TCP
+          port: 3000        # Forgejo's HTTP container port (Service maps :80 -> 3000)
+        - protocol: TCP
+          port: 2222        # git-SSH
+  egress:
+    # DNS must resolve `forgejo-postgres` BEFORE the Postgres rule below is usable — and resolvers use UDP *and* TCP 53.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - podSelector:
+            matchLabels:
+              app: forgejo-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+  # NB: every other egress is INTENTIONALLY severed (review F7) — webhook delivery, federated-avatar/gravatar fetch,
+  # remote migrations, and OIDC will not work. This is a private seed; the epic scopes them out. Image pulls are the
+  # kubelet's (node network), so they are unaffected by this policy.
