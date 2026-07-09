@@ -31,7 +31,31 @@ grade_end_state() {
   assert_ok "auditd running + forge ruleset loaded (U7)" inst_exec "$VM" sh -c 'systemctl is-active auditd | grep -qx active && auditctl -l 2>/dev/null | grep -q identity'
   assert_ok "podman + rootless forge-bridge, subuid distinct from forge-deploy (U7)" inst_exec "$VM" sh -c 'command -v podman >/dev/null && b="$(awk -F: "/^forge-bridge:/{print \$2}" /etc/subuid)"; d="$(awk -F: "/^forge-deploy:/{print \$2}" /etc/subuid)"; [ -n "$b" ] && [ "$b" != "$d" ]'
   assert_ok "sendmail resolves to the msmtpq queue wrapper (U8)" inst_exec "$VM" sh -c 'readlink -f "$(command -v sendmail)" | grep -q forge-sendmail'
-  assert_ok "msmtprc valid + NO host SMTP secret (U8)"           inst_exec "$VM" sh -c 'msmtp --pretend >/dev/null 2>&1 && ! grep -qiE "password|^auth +on" /etc/msmtprc'
+  # U10 amended this: local bridge auth is now expected. The invariant is "no Proton ACCOUNT credential on the host" —
+  # the Bridge's own generated password lives in a 0600 root file read via passwordeval, never inline in msmtprc (F4).
+  assert_ok "msmtprc: bridge auth via passwordeval, no inline cleartext password (U8)" \
+            inst_exec "$VM" sh -c 'grep -q "^passwordeval " /etc/msmtprc && ! grep -qE "^password[[:space:]]" /etc/msmtprc'
+  # The Bridge rejects a MAIL FROM the authenticated account does not own, and msmtp's `auto_from off` makes this the
+  # envelope sender — so a `from` that differs from `user` silently breaks every send after login (review F1).
+  assert_ok "msmtprc sender equals the authenticated Proton address (U10)" \
+            inst_exec "$VM" sh -c '[ "$(awk "/^from /{print \$2}" /etc/msmtprc)" = "$(awk "/^user /{print \$2}" /etc/msmtprc)" ]'
+  # `msmtp --pretend` may evaluate passwordeval (unverified); before the operator's init the passfile is absent, so
+  # running it then could fail spuriously. Exercise it only once the credential exists (review F3).
+  if inst_exec "$VM" test -f /etc/msmtp-bridge.pass 2>/dev/null; then
+    assert_ok "msmtp config parses with the bridge credential present" inst_exec "$VM" sh -c 'msmtp --pretend root >/dev/null 2>&1'
+  else skip "msmtp --pretend deferred: the bridge passfile does not exist until the operator's interactive init"; fi
+  assert_ok "bridge quadlet installed, owned by the non-root forge-bridge user (U10)" \
+            inst_exec "$VM" sh -c 'f=/home/forge-bridge/.config/containers/systemd/bridge.container; [ -f "$f" ] && [ "$(stat -c %U "$f")" = forge-bridge ]'
+  assert_ok "forge-bridge linger enabled — a nologin user cannot run systemctl --user without it (U10)" \
+            inst_exec "$VM" sh -c 'loginctl show-user forge-bridge -p Linger 2>/dev/null | grep -qx Linger=yes'
+  assert_ok "bridge publishes LOOPBACK only, never 0.0.0.0 (U10)" \
+            inst_exec "$VM" sh -c 'f=/home/forge-bridge/.config/containers/systemd/bridge.container; grep -q "PublishPort=127\.0\.0\.1:" "$f" && ! grep -q "PublishPort=0\.0\.0\.0:" "$f"'
+  # Real SMTP delivery cannot be verified without the operator's one-time INTERACTIVE Proton login (the image has no
+  # headless path), so a "spool drains" assert would false-fail. Check the bind address only if the bridge is actually up.
+  if inst_exec "$VM" sh -c 'ss -ltn 2>/dev/null | grep -q ":1025 "' 2>/dev/null; then
+    assert_ok "bridge SMTP bound to 127.0.0.1 specifically, not 0.0.0.0 (U10)" \
+              inst_exec "$VM" sh -c 'ss -ltn | grep ":1025 " | grep -q "127\.0\.0\.1:1025"'
+  else skip "live bridge SMTP bind + delivery deferred to the operator's one-time interactive Proton login"; fi
   assert_ok "msmtpq flush timer enabled (U8)"                    inst_exec "$VM" sh -c 'systemctl is-enabled msmtpq-flush.timer | grep -qx enabled'
   assert_ok "pre-Bridge mail SPOOLS, not lost (U8)"              inst_exec "$VM" sh -c 'printf "To: root\nSubject: t\n\nx\n" | sendmail root >/dev/null 2>&1; ls /var/spool/msmtpq 2>/dev/null | grep -q .'
   assert_ok "forge nft table present, INPUT default-drop (U9)"   inst_exec "$VM" sh -c 'nft list table inet forge 2>/dev/null | grep -q "hook input" && nft list table inet forge | grep -Eq "policy drop"'

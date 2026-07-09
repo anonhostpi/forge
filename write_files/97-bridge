@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# see anonhostpi/forge#11
+# phase: boot
+# Proton Bridge as a ROOTLESS podman quadlet owned by forge-bridge (U7's non-sudo, /usr/sbin/nologin user), bound to
+# LOOPBACK ONLY — U9's firewall opens no such port, so it is unreachable from outside by construction.
+#
+# HARD LIMIT — the seed is NOT fully hands-off here. Proton Bridge's first login is INTERACTIVE (Proton account + 2FA);
+# the image has NO headless/env-var login path. The operator runs this ONCE over an SSH TTY (nologin forbids `su -`):
+#
+#   sudo -u forge-bridge env XDG_RUNTIME_DIR=/run/user/$(id -u forge-bridge) \
+#     podman run -it --rm -v forge-bridge:/root <images.proton_bridge> init
+#
+# The Bridge then GENERATES its own local SMTP/IMAP credential into that volume. The operator writes the generated
+# password to /etc/msmtp-bridge.pass (0600 root), which msmtp reads via passwordeval. `secrets.proton` is consumed by
+# NO automation: those values are Bridge OUTPUTS, not inputs (review F3), which is why they are not schema-required.
+set -euo pipefail
+user=forge-bridge
+id "$user" >/dev/null 2>&1 || { echo "97-bridge: $user missing — U7's 90-podman must run first" >&2; exit 1; }
+uid="$(id -u "$user")"
+img="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["images"]["proton_bridge"])')"
+port="$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["mail"]["bridge_smtp_port"])')"
+
+# Linger MUST be active BEFORE any `systemctl --user`: a nologin user has no login session to start its user manager,
+# so without linger the manager never exists and every --user call fails (review F1). U7 enables it; assert, don't assume.
+loginctl show-user "$user" -p Linger 2>/dev/null | grep -qx 'Linger=yes' || loginctl enable-linger "$user"
+
+home="$(getent passwd "$user" | cut -d: -f6)"
+install -d -o "$user" -g "$user" -m 0755 "$home/.config/containers/systemd"
+cat > "$home/.config/containers/systemd/bridge.container" <<UNIT
+# see anonhostpi/forge#11 — quadlet .container (the maintained path), loopback-published only.
+[Unit]
+Description=Proton Mail Bridge (rootless, loopback-only)
+# StartLimit* are [Unit] directives (systemd moved them out of [Service] in v230). In [Service] systemd logs
+# "Unknown key name … ignoring" and DROPS them — the burst cap would silently not apply (review R2/F5).
+StartLimitBurst=5
+StartLimitIntervalSec=600
+
+[Container]
+Image=${img}
+Volume=forge-bridge:/root
+PublishPort=127.0.0.1:${port}:25
+PublishPort=127.0.0.1:1143:143
+
+[Service]
+# Not Restart=always: before the operator's interactive init the Bridge has no account, so an always-restart would
+# spin and spam the journal indefinitely. on-failure + the [Unit] start limit above lets it settle until init.
+# (RestartSec belongs here; StartLimit* do not — see the [Unit] note.)
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
+UNIT
+chown "$user:$user" "$home/.config/containers/systemd/bridge.container"
+
+# nologin: never a login shell. Drive the user manager with an explicit environment (review F1).
+as_bridge() { sudo -u "$user" env XDG_RUNTIME_DIR="/run/user/${uid}" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus" "$@"; }
+# `loginctl enable-linger` starts user@UID.service ASYNCHRONOUSLY, so the bus socket may not exist yet during cloud-init.
+# Wait briefly (review F4). If it never appears the quadlet generator still runs when the user manager starts at boot,
+# so the unit is generated either way — this only makes the immediate daemon-reload/start meaningful.
+for _ in $(seq 1 30); do [ -S "/run/user/${uid}/bus" ] && break; sleep 1; done
+as_bridge systemctl --user daemon-reload 2>/dev/null || true
+# Until the operator's interactive init populates the volume the Bridge cannot serve, so a start failure here is
+# EXPECTED and must not fail the boot. U8's msmtpq queue then HOLDS the mail rather than losing it — its whole purpose.
+as_bridge systemctl --user start bridge.service 2>/dev/null \
+  || echo "97-bridge: bridge not started — awaiting the operator's one-time interactive Proton login (see header)"
+echo "97-bridge applied (quadlet installed for ${user}; loopback SMTP ${port}; interactive login still required)"

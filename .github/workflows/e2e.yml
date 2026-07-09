@@ -18,7 +18,7 @@ jobs:
     runs-on: [self-hosted, kvm]
     env:
       HARNESS_GATE: "1"                            # missing prereq / all-skip / missing-required => FAIL, never green
-      HARNESS_REQUIRE: "U6 U7 U8 U11 U9 U12 U13 U14 U4 U3"   # full target set; a not-yet-landed required unit fails the gate (fail-closed) until it lands
+      HARNESS_REQUIRE: "U6 U7 U8 U10 U11 U9 U12 U13 U14 U4 U3"   # full target set; a not-yet-landed required unit fails the gate (fail-closed) until it lands
     strategy:
       matrix:
         substrate: [clean, dirty]
