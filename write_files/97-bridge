@@ -30,6 +30,10 @@ cat > "$home/.config/containers/systemd/bridge.container" <<UNIT
 # see anonhostpi/forge#11 — quadlet .container (the maintained path), loopback-published only.
 [Unit]
 Description=Proton Mail Bridge (rootless, loopback-only)
+# StartLimit* are [Unit] directives (systemd moved them out of [Service] in v230). In [Service] systemd logs
+# "Unknown key name … ignoring" and DROPS them — the burst cap would silently not apply (review R2/F5).
+StartLimitBurst=5
+StartLimitIntervalSec=600
 
 [Container]
 Image=${img}
@@ -39,11 +43,10 @@ PublishPort=127.0.0.1:1143:143
 
 [Service]
 # Not Restart=always: before the operator's interactive init the Bridge has no account, so an always-restart would
-# spin and spam the journal indefinitely. on-failure + a start limit lets it settle until init (review F5).
+# spin and spam the journal indefinitely. on-failure + the [Unit] start limit above lets it settle until init.
+# (RestartSec belongs here; StartLimit* do not — see the [Unit] note.)
 Restart=on-failure
 RestartSec=30
-StartLimitBurst=5
-StartLimitIntervalSec=600
 
 [Install]
 WantedBy=default.target

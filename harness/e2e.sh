@@ -42,7 +42,7 @@ grade_end_state() {
   # `msmtp --pretend` may evaluate passwordeval (unverified); before the operator's init the passfile is absent, so
   # running it then could fail spuriously. Exercise it only once the credential exists (review F3).
   if inst_exec "$VM" test -f /etc/msmtp-bridge.pass 2>/dev/null; then
-    assert_ok "msmtp config parses with the bridge credential present" inst_exec "$VM" sh -c 'msmtp --pretend >/dev/null 2>&1'
+    assert_ok "msmtp config parses with the bridge credential present" inst_exec "$VM" sh -c 'msmtp --pretend root >/dev/null 2>&1'
   else skip "msmtp --pretend deferred: the bridge passfile does not exist until the operator's interactive init"; fi
   assert_ok "bridge quadlet installed, owned by the non-root forge-bridge user (U10)" \
             inst_exec "$VM" sh -c 'f=/home/forge-bridge/.config/containers/systemd/bridge.container; [ -f "$f" ] && [ "$(stat -c %U "$f")" = forge-bridge ]'
