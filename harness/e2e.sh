@@ -52,6 +52,17 @@ grade_end_state() {
                  inst_exec "$VM" sh -c "kubectl run pos --rm -i --restart=Never --image=$IMG -- sh -c 'nc -w5 1.1.1.1 80 </dev/null'"
     assert_fails "pod CANNOT reach metadata 169.254.169.254 over TCP:80 — egress dropped, negative control (U9) (U12)" \
                  inst_exec "$VM" sh -c "kubectl run neg --rm -i --restart=Never --image=$IMG -- sh -c 'nc -w5 169.254.169.254 80 </dev/null'"
+    # NB: the two controls above run in `default`, which U12's forge-scoped policy does NOT cover — so they are
+    # attributable to U9's HOST drop alone. The asserts below run in ns `forge` and isolate the k8s layer (review F5).
+    assert_ok "baseline egress NetworkPolicy present (U12)" \
+              inst_exec "$VM" sh -c 'kubectl -n forge get networkpolicy baseline-egress >/dev/null 2>&1'
+    assert_ok "baseline-covered pod CAN still reach an allowed external IP — baseline is not over-blocking (U12)" \
+              inst_exec "$VM" sh -c "kubectl -n forge run u12pos --rm -i --restart=Never --image=$IMG -- sh -c 'nc -w5 1.1.1.1 80 </dev/null'"
+    # A probe LABELLED as forgejo is selected by U14's strict egress policy and EXCLUDED by this baseline (NotIn). U9
+    # never blocks 1.1.1.1, so this drop is attributable to the k8s layer alone — proving both that U14's restriction
+    # is enforced and that the additive union with the permissive baseline did NOT materialise (review F1).
+    assert_fails "forgejo-labelled pod CANNOT reach an arbitrary external IP — U14's strict egress survives the additive baseline (U12)" \
+                 inst_exec "$VM" sh -c "kubectl -n forge run u12np --rm -i --restart=Never --labels app.kubernetes.io/name=forgejo --image=$IMG -- sh -c 'nc -w5 1.1.1.1 80 </dev/null'"
     # U13 Postgres — requires the deploy flow (U4 SSH-push of the workload + Secret) to have run. Persistence: a sentinel
     # row written on the clean deploy must survive the DIRTY-substrate reboot via the local-path PVC (review F2).
     assert_ok "Postgres pod Ready (U13)" \
