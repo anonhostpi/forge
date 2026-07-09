@@ -1,0 +1,60 @@
+# see anonhostpi/forge#15 — `forgejo dump` backup. It is a FILESYSTEM+config CLI (repos, LFS, app.ini), NOT a network
+# client like U13's pg_dump — a fresh standalone pod would dump NOTHING (review F4). So this CronJob `kubectl exec`s
+# into the live Forgejo pod, which requires a dedicated ServiceAccount + a Role on pods/exec.
+# Scope: repos + config + DB (Forgejo must be up). U13's pg_dump is DB-only and Forgejo-independent — the two are
+# complementary, not symmetric. Off-box delivery of both is tracked in #32.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forgejo-backup
+  namespace: forge
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgejo-backup
+  namespace: forge
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgejo-backup
+  namespace: forge
+subjects:
+  - kind: ServiceAccount
+    name: forgejo-backup
+    namespace: forge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: forgejo-backup
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: forgejo-dump
+  namespace: forge
+spec:
+  schedule: "47 4 * * *"          # distinct from U13's pg_dump (17 3) — no collision
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: forgejo-backup
+          restartPolicy: OnFailure
+          containers:
+            - name: dump
+              image: rancher/kubectl:v1.31.4@sha256:5135fe5999d8472793979e1da0d1559da758c37668c3dfb1650c8f95adc706d0
+              command: ["/bin/sh", "-c"]
+              args:
+                - 'set -eu; pod="$(kubectl -n forge get pod -l app.kubernetes.io/name=forgejo -o jsonpath={.items[0].metadata.name})"; [ -n "$pod" ]; kubectl -n forge exec "$pod" -- sh -c "mkdir -p /data/backups && forgejo dump --type zip --file /data/backups/forgejo-$(date +%F-%H%M).zip"; echo "dumped into the Forgejo /data PVC (off-box delivery tracked #32)"'

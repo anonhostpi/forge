@@ -64,8 +64,20 @@ grade_end_state() {
               inst_exec "$VM" sh -c "kubectl -n forge exec statefulset/forgejo-postgres -- psql -U forgejo -tAc 'SELECT tok FROM forge_persist' | grep -qx forge-sentinel"
     assert_ok "Postgres backup CronJob present (U13)" \
               inst_exec "$VM" sh -c 'kubectl -n forge get cronjob forgejo-postgres-backup >/dev/null 2>&1'
-  else skip "kubectl absent (U11 pending) — k3s / firewall / metadata / postgres asserts deferred"; fi
-  skip "Forgejo HTTP 200 + git-SSH clone (U14 pending)"
+    # U14 Forgejo. The bundled-subchart guard is a direct regression test for the spec's worst trap: forgejo-helm v12
+    # ships postgresql-ha + redis-cluster ENABLED, which would silently replace U13's Postgres (review F1).
+    assert_ok "Forgejo pod Ready (U14)" \
+              inst_exec "$VM" sh -c 'kubectl -n forge wait --for=condition=ready pod -l app.kubernetes.io/name=forgejo --timeout=300s >/dev/null 2>&1'
+    assert_ok "no bundled Postgres/Redis — Forgejo uses U13's external DB (U14)" \
+              inst_exec "$VM" sh -c '! kubectl -n forge get statefulset,deployment -o name 2>/dev/null | grep -Eiq "postgresql|redis"'
+    assert_ok "Forgejo serves HTTP 200 on :80 (U14)" \
+              inst_exec "$VM" sh -c '[ "$(curl -s -o /dev/null -w %{http_code} --max-time 20 http://127.0.0.1/)" = 200 ]'
+    assert_ok "git-SSH answers on :2222 (U14)" \
+              inst_exec "$VM" sh -c 'ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | grep -q ssh-'
+    # A rotating host key is indistinguishable from a MITM to every git client — the /data PVC must keep it stable.
+    assert_ok "git-SSH host key STABLE across a pod restart (U14)" \
+              inst_exec "$VM" sh -c 'k1=$(ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | sort); [ -n "$k1" ] || exit 1; kubectl -n forge delete pod -l app.kubernetes.io/name=forgejo >/dev/null 2>&1; kubectl -n forge wait --for=condition=ready pod -l app.kubernetes.io/name=forgejo --timeout=300s >/dev/null 2>&1; sleep 5; k2=$(ssh-keyscan -T 10 -p 2222 127.0.0.1 2>/dev/null | sort); [ "$k1" = "$k2" ]'
+  else skip "kubectl absent (U11 pending) — k3s / firewall / metadata / postgres / forgejo asserts deferred"; fi
   skip "CI->seed:22 SSH-push deploy exercised end-to-end (U4 pending)"
   skip "user-data secret scrub-on-boot asserted (U3/U4 pending)"
 }

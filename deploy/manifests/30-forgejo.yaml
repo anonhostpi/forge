@@ -1,0 +1,79 @@
+# see anonhostpi/forge#15 — Forgejo via k3s's helm-controller. NON-secret values ONLY: every secret rides a Secret
+# REFERENCE (gitea.admin.existingSecret + additionalConfigFromEnvs/secretKeyRef), never a plaintext value in
+# valuesContent (k8s-lint's key-anchored guard enforces this). Chart source is an OCI ref — a GitHub slug is NOT
+# resolvable by helm-controller (review F9). Chart AND image are pinned (review F8).
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: forgejo
+  namespace: kube-system          # helm-controller's conventional home for HelmChart CRs; installs into targetNamespace
+spec:
+  chart: oci://code.forgejo.org/forgejo-helm/forgejo
+  version: 12.0.0                 # seed.yaml charts.forgejo (hardcoded — the plaintext path has no render step, U13 F7)
+  targetNamespace: forge
+  createNamespace: false          # 00-namespace.yaml owns it
+  valuesContent: |-
+    image:
+      tag: "11"
+      digest: sha256:d98d860ea64fd36cb0aabf0b46bbe1a37566b498eee4af0a6b246d5a45759d6d
+      rootless: true              # pinned: rootless runs Forgejo's built-in Go SSH server (not OpenSSH sshd) — review F5
+    # v12 ships these ENABLED by default. Unset, the install would stand up a 3-node Bitnami Postgres-HA cluster AND a
+    # Redis cluster on this single node, and Forgejo would wire to THOSE — ignoring U13's Postgres entirely (review F1).
+    postgresql-ha:
+      enabled: false
+    postgresql:
+      enabled: false
+    redis-cluster:
+      enabled: false
+    redis:
+      enabled: false
+    persistence:
+      enabled: true               # /data PVC: git-SSH host keys live here, so they are STABLE across pod restarts (review F5)
+      storageClass: local-path
+      size: 10Gi
+    service:
+      http:
+        type: LoadBalancer        # Klipper ServiceLB; U9's firewall already opens :80
+        port: 80
+      ssh:
+        type: LoadBalancer        # git-SSH; U9's firewall already opens :2222
+        port: 2222
+    gitea:
+      admin:
+        existingSecret: forgejo   # the chart reads keys named EXACTLY `username` + `password` (review F3)
+      config:
+        database:
+          DB_TYPE: postgres
+          HOST: forgejo-postgres:5432
+          NAME: forgejo
+          USER: forgejo           # PASSWD deliberately absent: it rides GITEA__database__PASSWD, never app.ini values (F3)
+        cache:
+          ADAPTER: memory         # Redis disabled -> keep cache/session/queue off it (review F1)
+        session:
+          PROVIDER: memory
+        queue:
+          TYPE: level             # leveldb on /data
+        server:
+          SSH_PORT: 2222
+          SSH_LISTEN_PORT: 2222
+      additionalConfigFromEnvs:   # toYaml'd straight into container env: -> secretKeyRef works (review F3)
+        - name: GITEA__database__PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: forgejo-postgres
+              key: app_password
+        - name: GITEA__security__SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: forgejo
+              key: secret_key
+        - name: GITEA__security__INTERNAL_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: forgejo
+              key: internal_token
+        - name: GITEA__mailer__PASSWD
+          valueFrom:
+            secretKeyRef:
+              name: forgejo
+              key: mailer_password
