@@ -17,7 +17,7 @@ render step**, so a few keys are *duplicated by hand* into a manifest rather tha
 | `hostname` | the box's hostname | **read by** `write_files/50-network` |
 | `k3s.version` | **the** pin. Reproducible installs; a moving channel would silently upgrade the cluster on re-provision | **read by** `write_files/99-k3s` |
 | `k3s.channel` | documented fallback only — `version` is what installs | — |
-| `postgres.{host,port,name,user}` | connection coordinates Forgejo is configured with (passwords are *not* here) | **mirrored** in `deploy/manifests/30-forgejo.yaml` (hardcoded; keep in sync) |
+| `postgres.{host,port,name,user}` | connection coordinates Forgejo is configured with (passwords are *not* here) | **mirrored** in `deploy/manifests/30-forgejo.yaml` and `10-postgres.yaml` (hardcoded; keep in sync) |
 | `images.proton_bridge` | Bridge image, pinned by **tag + digest** | **read by** `write_files/97-bridge` |
 | `charts.forgejo` | Forgejo Helm chart version | **mirrored** in `deploy/manifests/30-forgejo.yaml` (hardcoded; keep in sync) |
 | `mail.to` | operator recipient for host mail. **Set a real deliverable address.** | **read by** `write_files/55-msmtp` |

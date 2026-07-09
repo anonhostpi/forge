@@ -76,7 +76,9 @@ Over an SSH TTY as an admin (`forge-bridge` has `nologin`, so `su -` will not wo
 
 ```sh
 BRIDGE_UID=$(id -u forge-bridge)
-BRIDGE_IMG=$(python3 -c 'import yaml; print(yaml.safe_load(open("config/seed.yaml"))["images"]["proton_bridge"])')
+# The repo is cloned to /opt/forge on the box. Use the absolute path: an SSH session starts in your home directory,
+# not the repo root, so a relative `config/seed.yaml` would not resolve.
+BRIDGE_IMG=$(python3 -c 'import yaml; print(yaml.safe_load(open("/opt/forge/config/seed.yaml"))["images"]["proton_bridge"])')
 
 sudo -u forge-bridge env XDG_RUNTIME_DIR=/run/user/$BRIDGE_UID \
   DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$BRIDGE_UID/bus \
@@ -84,7 +86,7 @@ sudo -u forge-bridge env XDG_RUNTIME_DIR=/run/user/$BRIDGE_UID \
 ```
 
 Read the image from `seed.yaml` rather than typing a tag — the pin includes a **digest**, and a tag-only pull silently
-unpins it.
+unpins it. The later commands in this section reuse `$BRIDGE_UID`, so run them in the same SSH session.
 
 Log in. The Bridge writes its credentials into the `forge-bridge` volume and prints a **locally generated** SMTP
 password (this is *not* your Proton account password). Give it to msmtp:
